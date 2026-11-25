@@ -433,13 +433,51 @@ export interface VppThread {
   cpu?: number;
 }
 
-/** Parse `show threads`. */
+/**
+ * Parse `show threads`. Two layouts exist:
+ * `ID Name LWP CPU Sched ...` and
+ * `ID Name Type LWP Sched Policy (Priority) lcore Core Socket State` (seen on
+ * 26.06; Type is empty for vpp_main). `cpu` is the CPU / lcore column.
+ */
 export function parseThreads(text: string): VppThread[] {
   const out: VppThread[] = [];
+  const lines = stripAnsi(text).split("\n");
+  const lcoreLayout = lines.some((l) => /\blcore\b/.test(l));
+  for (const line of lines) {
+    if (lcoreLayout) {
+      const m = line.match(
+        /^\s*(\d+)\s+(\S+)\s+(?:[a-z][\w-]*\s+)?\d+\s+\S+\s+\(\d+\)\s+(\d+)/,
+      );
+      if (m) out.push({ id: Number(m[1]), name: m[2], cpu: Number(m[3]) });
+      continue;
+    }
+    const m = line.match(/^\s*(\d+)\s+(\S+)\s+\d+\s+(\d+)\s/);
+    if (m) out.push({ id: Number(m[1]), name: m[2], cpu: Number(m[3]) });
+  }
+  return out;
+}
+
+/** Link state of one hardware interface. */
+export interface HardwareLink {
+  /** Physical link up. */
+  linkUp: boolean;
+  /** Link speed as VPP prints it, e.g. `10 Gbps`; absent when unknown. */
+  speed?: string;
+}
+
+/** Parse `show hardware-interfaces brief` into name → link state. */
+export function parseHardwareBrief(text: string): Map<string, HardwareLink> {
+  const out = new Map<string, HardwareLink>();
+  let cur: HardwareLink | undefined;
   for (const line of stripAnsi(text).split("\n")) {
-    const m = line.match(/^\s*(\d+)\s+(\S+)\s+(?:\S+\s+)?(\d+)\s+(\d+)/);
-    if (!m) continue;
-    out.push({ id: Number(m[1]), name: m[2], cpu: Number(m[4]) });
+    const head = line.match(/^(\S+)\s+\d+\s+(up|down)\s+\S+/);
+    if (head) {
+      cur = { linkUp: head[2] === "up" };
+      out.set(head[1], cur);
+      continue;
+    }
+    const speed = line.match(/^\s+Link speed:\s+(.+?)\s*$/);
+    if (speed && cur && speed[1] !== "unknown") cur.speed = speed[1];
   }
   return out;
 }

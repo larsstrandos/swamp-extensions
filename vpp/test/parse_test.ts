@@ -5,6 +5,7 @@ import {
   parseErrors,
   parseFib,
   parseFibSummary,
+  parseHardwareBrief,
   parseHeap,
   parseInterfaceAddresses,
   parseInterfaces,
@@ -154,4 +155,32 @@ Deno.test("only show commands", () => {
   assertThrows(() => assertShowCommand("clear errors"));
   assertThrows(() => assertShowCommand("set interface state x down"));
   assertThrows(() => assertShowCommand("showx"));
+});
+
+Deno.test("parseThreads: lcore layout (VPP 26.06)", () => {
+  const t = parseThreads(
+    "ID     Name                Type        LWP     Sched Policy (Priority)  lcore  Core   Socket State\r\n" +
+      "0      vpp_main                        899     other (0)                0      0      0\r\n" +
+      "1      vpp_wk_0            workers     964     other (0)                1      1      0\r\n" +
+      "2      vpp_wk_1            workers     965     other (0)                2      2      0\r\n",
+  );
+  assertEquals(t, [
+    { id: 0, name: "vpp_main", cpu: 0 },
+    { id: 1, name: "vpp_wk_0", cpu: 1 },
+    { id: 2, name: "vpp_wk_1", cpu: 2 },
+  ]);
+});
+
+Deno.test("parseHardwareBrief", () => {
+  const lab = parseHardwareBrief(fx("hardware-interfaces_brief"));
+  assertEquals(lab.get("host-vb1"), { linkUp: true });
+  const hw = parseHardwareBrief(
+    "              Name                Idx   Link  Hardware\n" +
+      "TenGigabitEthernet1/0/0            1    down  TenGigabitEthernet1/0/0\n" +
+      "  Link speed: unknown\n  RX Queues:\n    queue thread         mode\n    0     vpp_wk_0 (1)   polling\n" +
+      "TenGigabitEthernet1/0/2            3     up   TenGigabitEthernet1/0/2\n" +
+      "  Link speed: 10 Gbps\n",
+  );
+  assertEquals(hw.get("TenGigabitEthernet1/0/0"), { linkUp: false });
+  assertEquals(hw.get("TenGigabitEthernet1/0/2"), { linkUp: true, speed: "10 Gbps" });
 });

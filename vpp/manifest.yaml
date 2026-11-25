@@ -1,6 +1,6 @@
 manifestVersion: 1
 name: "@lstrandos/vpp"
-version: "2026.11.25.2"
+version: "2026.11.25.3"
 license: Apache-2.0
 visibility: private
 repository: "https://github.com/larsstrandos/swamp-extensions"

@@ -1,7 +1,7 @@
 {
   "extension": "@lstrandos/vpp",
-  "version": "2026.11.25.2",
-  "reviewedAt": "2026-11-25T12:51:39Z",
+  "version": "2026.11.25.3",
+  "reviewedAt": "2026-11-25T12:59:14Z",
   "dimensions": [
     {
       "id": "credentials-secrets",
@@ -16,12 +16,12 @@
     {
       "id": "error-handling",
       "verdict": "pass",
-      "note": "Non-zero exit, vppctl 'unknown input' (exit 0), socket errors, missing binary and timeouts become clear errors naming node and command. health tolerates a missing linux-cp plugin."
+      "note": "Non-zero exit, vppctl unknown input (exit 0), socket errors, missing binary and timeouts become clear errors naming node and command. health tolerates a missing linux-cp plugin; show hardware-interfaces brief may fail (link state then omitted). Counter rate uses 1 s when the interval is unknown."
     },
     {
       "id": "testing-completeness",
       "verdict": "pass",
-      "note": "22 tests in test/ (parsers on real VPP 26.10 fixtures, argv per transport, deltas, truncation, refusal, failure paths); live smoke test against a VPP 26.10 container."
+      "note": "27 tests in test/: parsers on real VPP 26.10 fixtures plus synthetic 26.06 snippets (threads lcore layout, hardware brief), counter classification and rates, link-down suppression, deltas, truncation, refusal, failure paths. Live: lab container (26.10) and an edge router over SSH with sudo (26.06)."
     },
     {
       "id": "idempotency-resilience",
@@ -41,12 +41,12 @@
     {
       "id": "published-surface-hygiene",
       "verdict": "pass",
-      "note": "Docs use RFC 5737/3849 addresses and example.net; fixtures are outside the archive."
+      "note": "Docs use RFC 5737/3849 addresses and example.net; router-derived test snippets contain only generic interface names, no real addresses; fixtures are outside the archive."
     },
     {
       "id": "schema-strictness",
       "verdict": "pass",
-      "note": "Every resource field declared; schema-write conformance checked per spec."
+      "note": "Every resource field declared; new linkUp/linkSpeed (interfaces) and linkDown (health) are written; schema-write conformance rechecked."
     },
     {
       "id": "lifetime-gc",
@@ -75,8 +75,8 @@
     },
     {
       "id": "version-upgrades",
-      "verdict": "na",
-      "note": "Manifest-only release (repository URL); behavior code and behavior version unchanged, so no upgrade entry."
+      "verdict": "pass",
+      "note": "Behavior 2026.11.25.1 -> 2026.11.25.3 with a no-op upgrade (globalArguments unchanged); verified an existing instance moved from upgradable to current."
     }
   ]
 }

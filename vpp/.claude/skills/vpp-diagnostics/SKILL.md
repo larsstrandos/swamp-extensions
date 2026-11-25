@@ -47,18 +47,26 @@ swamp data query 'modelName == "<node>" && name == "health"' --select content --
   | jq '.results[0] | {status, findings}'
 ```
 
-`health` collects version, interfaces, lcp, errors, buffers, heap and threads in
-one call. It stores each of them and writes `findings` (critical / warning /
-info). Counter findings compare against the previous run, so on a node that has
-never been checked, run `health` twice, a little apart, before drawing
-conclusions from counters.
+`health` collects version, interfaces (with link state), lcp, errors, buffers,
+heap and threads in one call. It stores each of them and writes `findings`
+(critical / warning / info). Counter findings compare against the previous run,
+so on a node that has never been checked, run `health` twice, at least 10–30 s
+apart, before drawing conclusions from counters.
+
+Error counters are filtered before they become findings: harmless ones (`no
+error`, `interface is down`) are never reported; edge-router noise (TTL expiry,
+ND/ARP from IXP peers, LLC) only at ≥ 100/s; lost-traffic counters (tx failure,
+no buffers, MTU exceeded, rx miss) on any increase; everything else from
+`minErrorRate` (default 1/s, `--input minErrorRate=N`). To see all counters,
+including the filtered ones, read the `errors` data, which has a `delta` per
+counter.
 
 ## 3. Pick the method for the question
 
 | Question | Method | Data name |
 | --- | --- | --- |
 | Is the node OK at all? | `health` | `health` |
-| Which interfaces, addresses, tables, Linux names? | `interfaces` | `interfaces` |
+| Which interfaces, link state, addresses, tables, Linux names? | `interfaces` | `interfaces` |
 | Which linux-cp pairs, in which netns, is lcp-sync on? | `lcp` | `lcp` |
 | Which VRFs exist? | `tables` | `tables` |
 | How does VPP forward prefix X in table T? | `fib --input table=T --input prefix=X` | `fib-ip4-T-<prefix>` |

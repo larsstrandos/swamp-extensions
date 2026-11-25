@@ -15,3 +15,7 @@
 
 # Skills copied in by `swamp extension source add`; the source of truth is <ext>/.claude/skills/
 /.claude/skills/
+
+# Behavior instances for real infrastructure stay local; only the lab node is shared.
+/models/**/*.yaml
+!/models/@lstrandos/vpp/node/lab.yaml

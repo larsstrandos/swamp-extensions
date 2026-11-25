@@ -9,7 +9,8 @@ Each node is one `@lstrandos/vpp/node` behavior, reached with `vppctl`:
 
 Methods run only `show` commands. They parse the output into typed data and
 store it, so it can be queried with CEL and compared between runs (counter
-deltas). Tested against VPP 26.10 with linux-cp/linux-nl.
+deltas). Tested against VPP 26.10 (lab, linux-cp/linux-nl) and 26.06 (an edge
+router with DPDK, workers and linux-cp in a netns).
 
 The extension also ships the `vpp-diagnostics` skill. It tells an agent which
 method to use for which question and lists the known linux-cp/VRF/Bird pitfalls.
@@ -52,7 +53,7 @@ SSH uses your agent or `~/.ssh/config`. The extension needs no secrets.
 | Method | Runs | Stores |
 | --- | --- | --- |
 | `health` | version, interface, interface addr, lcp, errors, buffers, memory main-heap, threads | all of the below plus `health` with `status` and `findings` |
-| `interfaces` | `show interface`, `show interface addr`, `show lcp` | per interface: admin state, MTU, addresses with table id, counters, counter deltas, linux-cp name |
+| `interfaces` | `show interface`, `show interface addr`, `show hardware-interfaces brief`, `show lcp` | per interface: admin and link state, link speed, MTU, addresses with table id, counters, counter deltas, linux-cp name |
 | `lcp` | `show lcp` | linux-cp settings and pairs (with netns) |
 | `tables` | `show ip table`, `show ip6 table` | VRF tables |
 | `fib` | `show ip[6] fib table N [prefix]` | prefixes with paths (`via`, `glean`, `receive`, `drop`) and packet counters; `summary=true` for prefix-length counts only |
@@ -73,13 +74,28 @@ swamp behavior run lab show --input command="show bond details"
 `health` reports:
 
 - **critical**: a buffer pool below 10 % free, or the main heap above 90 % used
-- **warning**: a buffer pool below 25 % free, the main heap above 80 %, an
-  admin-down interface that has addresses or a linux-cp pair, rising rx/tx
-  errors or rx-miss, or rising `error`-severity counters (known-benign
-  af-packet counters are ignored)
-- **info**: rising drops, and linux-cp interfaces in non-default tables (the
-  Linux side must be in the matching VRF, because lcp-sync does not sync table
-  changes)
+- **warning**:
+  - a buffer pool below 25 % free, or the main heap above 80 %
+  - an admin-up interface whose link is down
+  - an admin-down interface that has addresses or a linux-cp pair
+  - rising rx/tx errors or rx-miss
+  - rising error counters (see below)
+- **info**: linux-cp interfaces in non-default tables (the Linux side must be in
+  the matching VRF, because lcp-sync does not sync table changes), or the
+  linux-cp plugin not being loaded
+
+Error counters are compared with the previous run and fall into four classes:
+
+| Class | Examples | Reported when |
+| --- | --- | --- |
+| benign | `no error`, af-packet block counters, `interface is down` | never (link state covers the last one) |
+| noisy | TTL expiry, ND/ARP from IXP peers, unknown LLC | ≥ 100/s (a loop or an attack) |
+| severe | `dpdk tx failure`, no buffers, MTU exceeded, rx miss | any increase |
+| other | everything else with severity `error`/`warn` | ≥ `minErrorRate` per second (default 1) |
+
+```bash
+swamp behavior run pe01 health --input minErrorRate=5
+```
 
 ## What runs on your machine
 

@@ -19,6 +19,7 @@ import {
   parseErrors,
   parseFib,
   parseFibSummary,
+  parseHardwareBrief,
   parseHeap,
   parseInterfaceAddresses,
   parseInterfaces,
@@ -106,6 +107,8 @@ const InterfaceSchema = z.object({
   unnumberedFrom: z.string().optional(),
   lcpLinuxName: z.string().optional(),
   lcpHostFor: z.string().optional(),
+  linkUp: z.boolean().optional(),
+  linkSpeed: z.string().optional(),
 });
 
 const InterfacesSchema = z.object({
@@ -191,6 +194,7 @@ const HealthSchema = z.object({
   interfaces: z.object({
     total: z.number(),
     adminUp: z.number(),
+    linkDown: z.number(),
     withAddress: z.number(),
   }),
   lcpPairs: z.number(),
@@ -244,10 +248,12 @@ async function collectInterfaces(
   ctx: Ctx,
   lcp?: LcpState,
 ): Promise<z.infer<typeof InterfacesSchema>> {
-  const [ifs, addrs] = await Promise.all([
+  const [ifs, addrs, hw] = await Promise.all([
     vpp.show("show interface"),
     vpp.show("show interface addr"),
+    vpp.show("show hardware-interfaces brief").catch(() => ""),
   ]);
+  const links = parseHardwareBrief(hw);
   const prev = await previous<z.infer<typeof InterfacesSchema>>(
     ctx,
     "interfaces",
@@ -263,6 +269,7 @@ async function collectInterfaces(
       const p = prevByName.get(i.name);
       const linux = linuxByPhy.get(i.name);
       const hostFor = phyByHost.get(i.name);
+      const link = links.get(i.name);
       return {
         ...i,
         ...(p
@@ -276,6 +283,8 @@ async function collectInterfaces(
           : {}),
         ...(linux ? { lcpLinuxName: linux } : {}),
         ...(hostFor ? { lcpHostFor: hostFor } : {}),
+        ...(link ? { linkUp: link.linkUp } : {}),
+        ...(link?.speed ? { linkSpeed: link.speed } : {}),
       };
     },
   );
@@ -320,17 +329,49 @@ async function collectErrors(
   };
 }
 
-/**
- * Counters VPP files under severity "error" that are normal operation.
- * Keyed by node, then a reason prefix (VPP truncates reasons).
- */
-const BENIGN: Record<string, string[]> = {
-  "af-packet-input": ["timed out block", "total received block"],
-  "ethernet-input": ["no error"],
-};
+type CounterKey = { node: string; reason: string };
 
-function isBenign(c: { node: string; reason: string }): boolean {
-  return (BENIGN[c.node] ?? []).some((r) => c.reason.startsWith(r));
+/** Severity-"error" counters that are normal operation: never reported. */
+const BENIGN: [RegExp, RegExp][] = [
+  [/^af-packet-input$/, /^(timed out block|total received block)/],
+  [/^(dpdk|ethernet|af-packet|af_xdp|rdma|avf)-input$/, /^no error/],
+  [/-output$/, /^interface is down/], // reported as link-down instead
+];
+
+/**
+ * Counters that are normal background noise on an edge router (traceroutes,
+ * IXP peers ARPing/NSing for each other, STP/LLDP): reported only at a rate
+ * that suggests a loop or an attack.
+ */
+const NOISY: [RegExp, RegExp][] = [
+  [/^ip[46]-input$/, /ttl <= 1/],
+  [/^ip6-icmp-input$/, /^neighbor solicitations (for unknown|from source)/],
+  [/^arp-(reply|input)$/, /^IP4 source address not local/],
+  [/^llc-input$/, /^unknown llc/],
+];
+const NOISY_RATE = 100;
+
+/** Counters that mean lost traffic or exhausted resources: any increase counts. */
+const SEVERE =
+  /tx failure|no buffer|buffer alloc|rx miss|mtu exceeded|ring full|queue full|no free/i;
+
+function matches(table: [RegExp, RegExp][], c: CounterKey): boolean {
+  return table.some(([n, r]) => n.test(c.node) && r.test(c.reason));
+}
+
+/** How health treats a rising error counter. Exported for tests. */
+export function classifyCounter(
+  c: CounterKey,
+): "benign" | "noisy" | "severe" | "normal" {
+  if (matches(BENIGN, c)) return "benign";
+  if (SEVERE.test(c.reason)) return "severe";
+  if (matches(NOISY, c)) return "noisy";
+  return "normal";
+}
+
+function seconds(from?: string, to?: string): number {
+  const d = (Date.parse(to ?? "") - Date.parse(from ?? "")) / 1000;
+  return Number.isFinite(d) && d > 0 ? d : 1; // unknown interval: rate = delta
 }
 
 /** Pure health evaluation, exported for tests. */
@@ -340,6 +381,8 @@ export function evaluateHealth(input: {
   errors: z.infer<typeof ErrorsSchema>;
   buffers: BufferPool[];
   heap?: { totalBytes: number; usedBytes: number };
+  /** Report ordinary error counters rising at least this fast (per second). */
+  minErrorRate?: number;
 }): z.infer<typeof FindingSchema>[] {
   const f: z.infer<typeof FindingSchema>[] = [];
   const lcpPhys = new Set(input.lcp.pairs.map((p) => p.phy));
@@ -393,14 +436,15 @@ export function evaluateHealth(input: {
         }`,
       });
     }
-    const drops = i.countersDelta?.["drops"];
-    if (drops && drops > 0) {
+    if (i.adminUp && i.linkUp === false) {
       f.push({
-        level: "info",
-        check: "interface-drops",
-        message:
-          `${i.name}: ${drops} drops since ${input.interfaces.previousAt}`,
+        level: "warning",
+        check: "link-down",
+        message: `${i.name} is admin up but the link is down${
+          i.lcpLinuxName ? ` (Linux ${i.lcpLinuxName})` : ""
+        }; admin it down if the port is unused`,
       });
+      continue; // its tx-error counts "interface is down"
     }
     for (const k of ["rx-error", "tx-error", "rx-miss"]) {
       const d = i.countersDelta?.[k];
@@ -433,18 +477,29 @@ export function evaluateHealth(input: {
   }
 
   if (input.errors.previousAt) {
+    const secs = seconds(input.errors.previousAt, input.errors.collectedAt);
+    const minRate = input.minErrorRate ?? 1;
     const rising = input.errors.counters
+      .filter((c) => (c.delta ?? 0) > 0 && c.severity !== "info")
+      .map((c) => ({
+        ...c,
+        kind: classifyCounter(c),
+        rate: (c.delta ?? 0) / secs,
+      }))
       .filter((c) =>
-        c.severity === "error" && (c.delta ?? 0) > 0 && !isBenign(c)
+        c.kind === "severe" ||
+        (c.kind === "noisy" && c.rate >= NOISY_RATE) ||
+        (c.kind === "normal" && c.rate >= minRate)
       )
-      .sort((a, b) => (b.delta ?? 0) - (a.delta ?? 0))
-      .slice(0, 5);
+      .sort((a, b) => b.rate - a.rate)
+      .slice(0, 8);
     for (const c of rising) {
       f.push({
         level: "warning",
         check: "error-counters",
-        message:
-          `${c.node}: "${c.reason}" +${c.delta} since ${input.errors.previousAt}`,
+        message: `${c.node}: "${c.reason}" +${c.delta} in ${
+          secs.toFixed(0)
+        }s (${c.rate.toFixed(1)}/s)`,
       });
     }
   }
@@ -454,6 +509,12 @@ export function evaluateHealth(input: {
 // ---------------------------------------------------------------- behavior
 
 const NoArgs = z.object({});
+
+const HealthArgs = z.object({
+  minErrorRate: z.number().min(0).default(1).describe(
+    "Report an error counter when it rises at least this many per second since the previous run (counters that mean lost traffic are always reported)",
+  ),
+});
 
 const FibArgs = z.object({
   family: z.enum(["ip4", "ip6"]).default("ip4").describe("Address family"),
@@ -485,7 +546,15 @@ function slug(s: string): string {
 /** VPP node diagnostics behavior. */
 export const behavior = {
   type: "@lstrandos/vpp/node",
-  version: "2026.11.25.1",
+  version: "2026.11.25.3",
+  upgrades: [
+    {
+      toVersion: "2026.11.25.3",
+      description:
+        "No global argument changes (link state, counter classification, health minErrorRate)",
+      upgradeAttributes: (old: Record<string, unknown>) => old,
+    },
+  ],
   description:
     "Read-only VPP diagnostics through vppctl (local, container or SSH)",
   globalArguments: NodeArgsSchema,
@@ -685,8 +754,11 @@ export const behavior = {
       description:
         "Collect version, interfaces, linux-cp, errors, buffers, heap and threads in one go and write a health summary with findings",
       kind: "read",
-      arguments: NoArgs,
-      execute: async (args: Injected, ctx: Ctx) => {
+      arguments: HealthArgs,
+      execute: async (
+        args: z.infer<typeof HealthArgs> & Injected,
+        ctx: Ctx,
+      ) => {
         const vpp = session(args, ctx);
         const node = describeNode(ctx.globalArgs);
         const [versionText, buffersText, heapText, threadsText] = await Promise
@@ -715,6 +787,7 @@ export const behavior = {
           errors,
           buffers,
           heap,
+          minErrorRate: args.minErrorRate ?? 1,
         });
         if (!lcpLoaded) {
           findings.push({
@@ -750,6 +823,10 @@ export const behavior = {
             interfaces: {
               total: interfaces.count,
               adminUp: interfaces.interfaces.filter((i) => i.adminUp).length,
+              linkDown: interfaces.interfaces.filter((i) =>
+                i.adminUp && i.linkUp === false
+              )
+                .length,
               withAddress: interfaces.interfaces.filter((i) =>
                 i.addresses.length
               ).length,
