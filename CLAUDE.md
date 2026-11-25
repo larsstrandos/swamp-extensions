@@ -57,5 +57,5 @@ Monorepo for the `@lstrandos/*` Swamp Club extensions; one folder per extension 
 
 - Edit skills in `<ext>/.claude/skills/`, never in the root `.claude/skills/` (that is a gitignored copy made by `swamp extension source add`; re-run it to refresh).
 - Tests and fixtures go in `<ext>/test/` so they are not shipped. Fixtures are real command output; use RFC 5737/3849 addresses in docs.
-- Always `export SWAMP_EXTENSION_REVIEW_DIR=$PWD/reviews` and push with `--extensions-dir <ext>`. Commit the review report together with the release.
+- Always `export SWAMP_EXTENSION_REVIEW_DIR=$PWD/reviews` and pass `--extensions-dir <ext>` to `fmt`, `quality` and `push`. Commit the review report together with the release.
 - Bump the version with `swamp extension version` and add an upgrades entry when a behavior changes.

@@ -38,15 +38,16 @@ ext=vpp
 
 ~/.swamp/deno/deno test --allow-read $ext/test/
 swamp extension version --manifest $ext/manifest.yaml --json   # next CalVer
-swamp extension fmt $ext/manifest.yaml
-swamp extension quality $ext/manifest.yaml
+swamp extension fmt $ext/manifest.yaml --extensions-dir $ext
+swamp extension quality $ext/manifest.yaml --extensions-dir $ext
 swamp extension push $ext/manifest.yaml --extensions-dir $ext --dry-run --json
 # write/refresh the review report at the path the dry run prints, then:
 swamp extension push $ext/manifest.yaml --extensions-dir $ext --yes --json
 ```
 
-`--extensions-dir` is needed because `source add` puts a copy of each skill in
-the root `.claude/skills/`, so without it the skill would exist under two roots.
+`fmt`, `quality` and `push` all need `--extensions-dir`, because `source add`
+puts a copy of each skill in the root `.claude/skills/`. Without the flag, the
+skill exists under two roots.
 
 ## Smoke tests
 
