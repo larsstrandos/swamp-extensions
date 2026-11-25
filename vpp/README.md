@@ -77,7 +77,8 @@ swamp behavior run lab show --input command="show bond details"
 - **warning**:
   - a buffer pool below 25 % free, or the main heap above 80 %
   - an admin-up interface whose link is down
-  - an admin-down interface that has addresses or a linux-cp pair
+  - an admin-down interface that still has addresses (admin down without
+    addresses counts as deliberately unused and is not reported)
   - rising rx/tx errors or rx-miss
   - rising error counters (see below)
 - **info**: linux-cp interfaces in non-default tables (the Linux side must be in

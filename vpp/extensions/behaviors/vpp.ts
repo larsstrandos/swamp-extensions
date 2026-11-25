@@ -427,14 +427,20 @@ export function evaluateHealth(input: {
 
   for (const i of input.interfaces.interfaces) {
     if (i.name === "local0") continue;
-    if (!i.adminUp && (i.addresses.length > 0 || lcpPhys.has(i.name))) {
-      f.push({
-        level: "warning",
-        check: "interface-down",
-        message: `${i.name} is admin down but has ${
-          i.addresses.length ? "addresses" : "a linux-cp pair"
-        }`,
-      });
+    if (!i.adminUp) {
+      // Admin down is a deliberate state. It is only suspicious when the
+      // interface still carries addresses (unnumbered borrows them, so skip
+      // those too); its counters are not judged.
+      if (i.addresses.length > 0 && !i.unnumberedFrom) {
+        f.push({
+          level: "warning",
+          check: "interface-down",
+          message: `${i.name} is admin down but has addresses (${
+            i.addresses.map((x) => x.address).join(", ")
+          })`,
+        });
+      }
+      continue;
     }
     if (i.adminUp && i.linkUp === false) {
       f.push({
@@ -546,12 +552,17 @@ function slug(s: string): string {
 /** VPP node diagnostics behavior. */
 export const behavior = {
   type: "@lstrandos/vpp/node",
-  version: "2026.11.25.3",
+  version: "2026.11.25.4",
   upgrades: [
     {
       toVersion: "2026.11.25.3",
       description:
         "No global argument changes (link state, counter classification, health minErrorRate)",
+      upgradeAttributes: (old: Record<string, unknown>) => old,
+    },
+    {
+      toVersion: "2026.11.25.4",
+      description: "No global argument changes (admin-down interfaces)",
       upgradeAttributes: (old: Record<string, unknown>) => old,
     },
   ],

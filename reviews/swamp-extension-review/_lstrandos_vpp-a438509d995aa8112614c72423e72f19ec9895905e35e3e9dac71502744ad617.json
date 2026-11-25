@@ -1,7 +1,7 @@
 {
   "extension": "@lstrandos/vpp",
-  "version": "2026.11.25.3",
-  "reviewedAt": "2026-11-25T12:59:14Z",
+  "version": "2026.11.25.4",
+  "reviewedAt": "2026-11-25T13:12:32Z",
   "dimensions": [
     {
       "id": "credentials-secrets",
@@ -21,12 +21,12 @@
     {
       "id": "testing-completeness",
       "verdict": "pass",
-      "note": "27 tests in test/: parsers on real VPP 26.10 fixtures plus synthetic 26.06 snippets (threads lcore layout, hardware brief), counter classification and rates, link-down suppression, deltas, truncation, refusal, failure paths. Live: lab container (26.10) and an edge router over SSH with sudo (26.06)."
+      "note": "29 tests in test/: parsers (26.10 fixtures, 26.06 snippets), counter classes and rates, link-down and admin-down handling, upgrade chain order, deltas, truncation, refusal, failure paths. Live: lab (26.10) and an edge router over SSH+sudo (26.06), before and after a vppcfg change."
     },
     {
       "id": "idempotency-resilience",
       "verdict": "pass",
-      "note": "Read-only; counter deltas handle cleared counters (cur < prev)."
+      "note": "Read-only; counter deltas handle cleared counters; admin-down interfaces are not judged on counters."
     },
     {
       "id": "api-contracts",
@@ -76,7 +76,7 @@
     {
       "id": "version-upgrades",
       "verdict": "pass",
-      "note": "Behavior 2026.11.25.1 -> 2026.11.25.3 with a no-op upgrade (globalArguments unchanged); verified an existing instance moved from upgradable to current."
+      "note": "No-op upgrades .3 and .4 in ascending order ending at the behavior version (a misordered chain made the type fail to load; a unit test now guards it); existing instance verified current."
     }
   ]
 }

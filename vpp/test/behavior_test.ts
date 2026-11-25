@@ -232,3 +232,36 @@ Deno.test("health still works when linux-cp is not loaded", async () => {
   assertEquals(health.status, "ok");
   assertEquals(health.findings.some((f) => f.check === "lcp"), true);
 });
+
+Deno.test("evaluateHealth: admin-down ports are quiet unless they still have addresses", () => {
+  const base = { mtu: { l3: 9214, ip4: 0, ip6: 0, mpls: 0 }, counters: {}, countersDelta: { "tx-error": 27 } };
+  const f = evaluateHealth({
+    buffers: [],
+    lcp: {
+      settings: {},
+      pairs: [{ index: 0, phy: "TenGigabitEthernet1/0/0", host: "tap1", linuxName: "e0", linuxIfIndex: 5, type: "tap" }],
+    },
+    interfaces: ifaces([
+      // unused port, admin down on purpose: nothing to report
+      { ...base, name: "TenGigabitEthernet1/0/0", index: 1, adminUp: false, linkUp: false, addresses: [] },
+      // admin down but still addressed: suspicious
+      {
+        ...base,
+        name: "TenGigabitEthernet3/0/0",
+        index: 5,
+        adminUp: false,
+        addresses: [{ address: "192.0.2.1/31", family: "ip4", tableId: 0 }],
+      },
+    ]),
+    errors: errs([]),
+  });
+  assertEquals(f.map((x) => x.message), [
+    "TenGigabitEthernet3/0/0 is admin down but has addresses (192.0.2.1/31)",
+  ]);
+});
+
+Deno.test("upgrade chain is ascending and ends at the behavior version", () => {
+  const to = behavior.upgrades.map((u) => u.toVersion);
+  assertEquals([...to].sort(), to);
+  assertEquals(to[to.length - 1], behavior.version);
+});
