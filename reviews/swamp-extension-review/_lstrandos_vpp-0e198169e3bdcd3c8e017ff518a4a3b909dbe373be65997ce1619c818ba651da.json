@@ -1,7 +1,7 @@
 {
   "extension": "@lstrandos/vpp",
-  "version": "2026.11.25.6",
-  "reviewedAt": "2026-11-25T14:06:13Z",
+  "version": "2026.11.25.7",
+  "reviewedAt": "2026-11-25T14:07:52Z",
   "dimensions": [
     {
       "id": "credentials-secrets",
@@ -41,7 +41,7 @@
     {
       "id": "published-surface-hygiene",
       "verdict": "pass",
-      "note": "Docs use RFC 5737/3849 addresses and example.net; router-derived test snippets contain only generic interface names, no real addresses; fixtures are outside the archive. The shipped workflow names no nodes; nodes come from the nodes input."
+      "note": "Docs use RFC 5737/3849 addresses and example.net; router-derived test snippets contain only generic interface names, no real addresses; fixtures are outside the archive. The shipped workflow names no nodes; nodes come from the nodes input. README ControlMaster example uses host aliases and example.net only."
     },
     {
       "id": "schema-strictness",
@@ -76,7 +76,7 @@
     {
       "id": "version-upgrades",
       "verdict": "pass",
-      "note": "Manifest-only release for the workflow (2026.11.25.6); behavior version stays 2026.11.25.5 with its upgrade chain (.3, .4 no-op; .5 adds the vppcfg global arguments with defaults), guarded by a test."
+      "note": "Manifest-only release (README: SSH ControlMaster); behavior version stays 2026.11.25.5 with its upgrade chain, guarded by a test."
     }
   ]
 }

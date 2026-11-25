@@ -51,6 +51,34 @@ swamp behavior create @lstrandos/vpp/node pe01 \
 
 SSH uses your agent or `~/.ssh/config`. The extension needs no secrets.
 
+### Faster SSH: reuse one connection
+
+Every vppctl or vppcfg call is its own `ssh` process, so `health` opens about a
+dozen connections. With OpenSSH connection sharing (`ControlMaster`) only the
+first one does the handshake. On one router this took `health` from about 2.6 s
+to 1.6 s; the gain grows with latency and with jump hosts.
+
+Either in `~/.ssh/config`, which also covers your own ssh sessions:
+
+```
+Host pe01 pe02
+    ControlMaster auto
+    ControlPath ~/.ssh/cm/%C
+    ControlPersist 60s
+```
+
+(`mkdir -m 700 ~/.ssh/cm` once), or per node with `sshOptions`:
+
+```bash
+swamp behavior create @lstrandos/vpp/node pe01 \
+  --global-arg transport=ssh --global-arg host=root@pe01.example.net \
+  --global-arg 'sshOptions=["-o","ControlMaster=auto","-o","ControlPath=~/.ssh/cm/%C","-o","ControlPersist=60s"]'
+```
+
+`ControlPersist` keeps the master open that long after the last call, so
+back-to-back runs (or the workflow) reuse it too. `ssh -O exit -o
+ControlPath=~/.ssh/cm/%C <host>` closes it.
+
 ## Methods
 
 | Method | Runs | Stores |
