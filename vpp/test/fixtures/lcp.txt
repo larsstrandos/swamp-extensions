@@ -1,0 +1,9 @@
+lcp default netns '<unset>'
+lcp lcp-auto-subint off
+lcp lcp-sync off
+lcp lcp-sync-unnumbered on
+lcp del-static-on-link-down off
+lcp del-dynamic-on-link-down off
+itf-pair: [0] host-vb1 tap4096 blue1 6 type tap
+itf-pair: [1] host-vb2 tap4097 blue2 8 type tap
+itf-pair: [2] host-vr1 tap4098 red1 10 type tap

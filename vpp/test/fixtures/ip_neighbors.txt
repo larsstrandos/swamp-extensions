@@ -1,0 +1,7 @@
+     Age                       IP                    Flags      Ethernet              Interface       
+    272.0391                192.0.2.1                  D    de:d5:d6:22:e7:75 host-vb1
+    271.7801              2001:db8:1::2                D    de:d5:d6:22:e7:75 host-vb1
+    269.8236              198.51.100.2                 D    72:52:a6:b2:ab:c7 host-vb2
+    269.4155             2001:db8:51::2                D    72:52:a6:b2:ab:c7 host-vb2
+    272.4222                192.0.2.1                  D    aa:72:eb:49:32:ee host-vr1
+    272.4103              2001:db8:1::2                D    aa:72:eb:49:32:ee host-vr1

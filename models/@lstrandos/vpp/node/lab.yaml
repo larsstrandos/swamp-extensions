@@ -1,0 +1,16 @@
+type: '@lstrandos/vpp/node'
+typeVersion: 2026.11.25.1
+id: 2755d94d-fce1-4c0f-a4d8-a9eb2664217d
+name: lab
+version: 1
+tags: {}
+globalArguments:
+  transport: docker
+  container: vpp-bird-vrf-test
+  containerRuntime: docker
+  socket: /run/vpp/cli.sock
+  sudo: false
+  sshOptions: []
+  vppctl: vppctl
+  timeoutSeconds: 30
+methods: {}

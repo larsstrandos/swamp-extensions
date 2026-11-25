@@ -1,0 +1,4 @@
+  base 0x7fe26b16f000, size 512m, locked, unmap-on-destroy, name 'main heap'
+    page stats: page-size 4K, total 131072, populated 60091, not-populated 70981
+      numa 0: 60091 pages, 234.73m bytes
+    total: 512.00M, used: 230.81M, free: 281.19M, trimmable: 277.28M

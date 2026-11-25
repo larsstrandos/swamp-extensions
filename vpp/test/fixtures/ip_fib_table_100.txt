@@ -1,0 +1,65 @@
+ipv4-VRF:100, fib_index:1, flow hash:[src dst sport dport proto flowlabel ] epoch:0 flags:none locks:[interface:2, CLI:1, adjacency:1, lcp-rt:1, ]
+0.0.0.0/0
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:9 buckets:1 uRPF:7 to:[0:0]]
+    [0] [@0]: dpo-drop ip4
+0.0.0.0/32
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:10 buckets:1 uRPF:8 to:[0:0]]
+    [0] [@0]: dpo-drop ip4
+10.100.0.0/24
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:56 buckets:1 uRPF:60 to:[3:252]]
+    [0] [@5]: ipv4 via 192.0.2.1 host-vb1: mtu:9000 next:5 flags:[] ded5d622e77502feb284a3a30800
+10.100.1.0/24
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:58 buckets:1 uRPF:60 to:[0:0]]
+    [0] [@5]: ipv4 via 192.0.2.1 host-vb1: mtu:9000 next:5 flags:[] ded5d622e77502feb284a3a30800
+10.110.0.0/24
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:50 buckets:1 uRPF:53 to:[0:0]]
+    [0] [@0]: dpo-drop ip4
+192.0.2.0/31
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:24 buckets:1 uRPF:25 to:[0:0]]
+    [0] [@4]: ipv4-glean: [src:192.0.2.0/31] host-vb1: mtu:9000 next:1 flags:[] ffffffffffff02feb284a3a30806
+192.0.2.0/32
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:23 buckets:1 uRPF:24 to:[220:13721]]
+    [0] [@13]: dpo-receive: 192.0.2.0 on host-vb1
+192.0.2.1/32
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:25 buckets:1 uRPF:26 to:[0:0] via:[3:252]]
+    [0] [@5]: ipv4 via 192.0.2.1 host-vb1: mtu:9000 next:5 flags:[] ded5d622e77502feb284a3a30800
+198.51.100.0/32
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:33 buckets:1 uRPF:34 to:[0:0]]
+    [0] [@0]: dpo-drop ip4
+198.51.100.0/24
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:32 buckets:1 uRPF:33 to:[0:0]]
+    [0] [@4]: ipv4-glean: [src:198.51.100.0/24] host-vb2: mtu:9000 next:2 flags:[] ffffffffffff02fe740408110806
+198.51.100.1/32
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:31 buckets:1 uRPF:32 to:[0:0]]
+    [0] [@13]: dpo-receive: 198.51.100.1 on host-vb2
+198.51.100.2/32
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:60 buckets:1 uRPF:62 to:[3:252]]
+    [0] [@5]: ipv4 via 198.51.100.2 host-vb2: mtu:9000 next:6 flags:[] 7252a6b2abc702fe740408110800
+198.51.100.255/32
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:34 buckets:1 uRPF:36 to:[0:0]]
+    [0] [@0]: dpo-drop ip4
+224.0.0.0/4
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:12 buckets:1 uRPF:10 to:[0:0]]
+    [0] [@0]: dpo-drop ip4
+240.0.0.0/4
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:11 buckets:1 uRPF:9 to:[0:0]]
+    [0] [@0]: dpo-drop ip4
+255.255.255.255/32
+  unicast-ip4-chain
+  [@0]: dpo-load-balance: [proto:ip4 index:13 buckets:1 uRPF:21 to:[0:0]]
+    [0] [@13]: dpo-receive: 0.0.0.0 on local0

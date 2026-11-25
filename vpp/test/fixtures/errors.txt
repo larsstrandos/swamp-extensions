@@ -1,0 +1,12 @@
+   Count                  Node                              Reason               Severity 
+       943          af-packet-input                    timed out block             error  
+       943          af-packet-input                  total received block          error  
+         1             arp-reply                       ARP replies sent            info   
+         2             arp-reply             ARP request IP4 source address lear   info   
+        11             ip6-input                    ip6 source lookup miss         error  
+        12        ip6-local-hop-by-hop       Unknown protocol ip6 local h-b-h pa   error  
+         6           ip6-icmp-input                   echo replies sent            info   
+         6           ip6-icmp-input          neighbor solicitations for unknown    error  
+         2           ip6-icmp-input              neighbor advertisements sent      info   
+         6           ip4-icmp-input                   echo replies sent            info   
+         4           ethernet-input                        no error                error  

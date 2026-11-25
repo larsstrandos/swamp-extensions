@@ -1,0 +1,13 @@
+host-vb1 (up):
+  L3 192.0.2.0/31 ip4 table-id 100 fib-idx 1
+  L3 2001:db8:1::1/64 ip6 table-id 100 fib-idx 1
+host-vb2 (up):
+  L3 198.51.100.1/24 ip4 table-id 100 fib-idx 1
+  L3 2001:db8:51::1/64 ip6 table-id 100 fib-idx 1
+host-vr1 (up):
+  L3 192.0.2.0/31 ip4 table-id 200 fib-idx 2
+  L3 2001:db8:1::1/64 ip6 table-id 200 fib-idx 2
+local0 (dn):
+tap4096 (up):
+tap4097 (up):
+tap4098 (up):

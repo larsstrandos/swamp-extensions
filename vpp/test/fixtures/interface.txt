@@ -1,0 +1,40 @@
+              Name               Idx    State  MTU (L3/IP4/IP6/MPLS)     Counter          Count     
+host-vb1                          1      up          9000/0/0/0     rx packets                   470
+                                                                    rx bytes                   40636
+                                                                    tx packets                   463
+                                                                    tx bytes                   39972
+                                                                    drops                         12
+                                                                    ip4                          223
+                                                                    ip6                          246
+host-vb2                          3      up          9000/0/0/0     rx packets                    32
+                                                                    rx bytes                    2748
+                                                                    tx packets                    22
+                                                                    tx bytes                    2052
+                                                                    drops                         11
+                                                                    ip4                            3
+                                                                    ip6                           28
+host-vr1                          5      up          9000/0/0/0     rx packets                   459
+                                                                    rx bytes                   39472
+                                                                    tx packets                   449
+                                                                    tx bytes                   38747
+                                                                    drops                         12
+                                                                    ip4                          214
+                                                                    ip6                          244
+local0                            0     down          0/0/0/0       
+tap4096                           2      up          9000/0/0/0     rx packets                   449
+                                                                    rx bytes                   38464
+                                                                    tx packets                   447
+                                                                    tx bytes                   38278
+                                                                    ip4                          219
+                                                                    ip6                          229
+tap4097                           4      up          9000/0/0/0     rx packets                    13
+                                                                    rx bytes                    1106
+                                                                    tx packets                    13
+                                                                    tx bytes                     910
+                                                                    ip6                           13
+tap4098                           6      up          9000/0/0/0     rx packets                   440
+                                                                    rx bytes                   37801
+                                                                    tx packets                   441
+                                                                    tx bytes                   37676
+                                                                    ip4                          212
+                                                                    ip6                          227

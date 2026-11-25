@@ -1,0 +1,7 @@
+ipv4-VRF:100, fib_index:1, flow hash:[src dst sport dport proto flowlabel ] epoch:0 flags:none locks:[interface:2, CLI:1, adjacency:1, lcp-rt:1, ]
+    Prefix length         Count     
+                   0               1
+                   4               2
+                  24               4
+                  31               1
+                  32               8

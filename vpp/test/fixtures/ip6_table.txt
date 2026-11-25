@@ -1,0 +1,6 @@
+[0] table_id:0 ipv6-VRF:0
+[1] table_id:100 ipv6-VRF:100
+[2] table_id:200 ipv6-VRF:200
+[3] table_id:4294967295 IP6-link-local:host-vb1
+[4] table_id:4294967295 IP6-link-local:host-vb2
+[5] table_id:4294967295 IP6-link-local:host-vr1

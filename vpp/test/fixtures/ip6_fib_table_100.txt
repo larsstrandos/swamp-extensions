@@ -1,0 +1,45 @@
+ipv6-VRF:100, fib_index:1, flow hash:[src dst sport dport proto flowlabel ] epoch:0 flags:none locks:[interface:2, CLI:1, adjacency:1, lcp-rt:1, ]
+::/0
+  unicast-ip6-chain
+  [@0]: dpo-load-balance: [proto:ip6 index:14 buckets:1 uRPF:12 to:[0:0]]
+    [0] [@0]: dpo-drop ip6
+2001:db8:1::/64
+  unicast-ip6-chain
+  [@0]: dpo-load-balance: [proto:ip6 index:30 buckets:1 uRPF:31 to:[0:0]]
+    [0] [@4]: ipv6-glean: [src:2001:db8:1::/64] host-vb1: mtu:9000 next:2 flags:[] ffffffffffff02feb284a3a386dd
+2001:db8:1::1/128
+  unicast-ip6-chain
+  [@0]: dpo-load-balance: [proto:ip6 index:29 buckets:1 uRPF:30 to:[218:18051]]
+    [0] [@20]: dpo-receive: 2001:db8:1::1 on host-vb1
+2001:db8:1::2/128
+  unicast-ip6-chain
+  [@0]: dpo-load-balance: [proto:ip6 index:55 buckets:1 uRPF:59 to:[3:312]]
+    [0] [@5]: ipv6 via 2001:db8:1::2 host-vb1: mtu:9000 next:5 flags:[] ded5d622e77502feb284a3a386dd
+2001:db8:51::/64
+  unicast-ip6-chain
+  [@0]: dpo-load-balance: [proto:ip6 index:39 buckets:1 uRPF:42 to:[0:0]]
+    [0] [@4]: ipv6-glean: [src:2001:db8:51::/64] host-vb2: mtu:9000 next:3 flags:[] ffffffffffff02fe7404081186dd
+2001:db8:51::1/128
+  unicast-ip6-chain
+  [@0]: dpo-load-balance: [proto:ip6 index:38 buckets:1 uRPF:41 to:[0:0]]
+    [0] [@20]: dpo-receive: 2001:db8:51::1 on host-vb2
+2001:db8:51::2/128
+  unicast-ip6-chain
+  [@0]: dpo-load-balance: [proto:ip6 index:61 buckets:1 uRPF:63 to:[3:312]]
+    [0] [@5]: ipv6 via 2001:db8:51::2 host-vb2: mtu:9000 next:6 flags:[] 7252a6b2abc702fe7404081186dd
+2001:db8:100::/48
+  unicast-ip6-chain
+  [@0]: dpo-load-balance: [proto:ip6 index:59 buckets:1 uRPF:61 to:[3:312]]
+    [0] [@5]: ipv6 via 2001:db8:1::2 host-vb1: mtu:9000 next:5 flags:[] ded5d622e77502feb284a3a386dd
+2001:db8:101::/48
+  unicast-ip6-chain
+  [@0]: dpo-load-balance: [proto:ip6 index:57 buckets:1 uRPF:61 to:[0:0]]
+    [0] [@5]: ipv6 via 2001:db8:1::2 host-vb1: mtu:9000 next:5 flags:[] ded5d622e77502feb284a3a386dd
+2001:db8:110::/48
+  unicast-ip6-chain
+  [@0]: dpo-load-balance: [proto:ip6 index:49 buckets:1 uRPF:52 to:[0:0]]
+    [0] [@0]: dpo-drop ip6
+fe80::/10
+  unicast-ip6-chain
+  [@0]: dpo-load-balance: [proto:ip6 index:15 buckets:1 uRPF:13 to:[0:0]]
+    [0] [@14]: ip6-link-local
