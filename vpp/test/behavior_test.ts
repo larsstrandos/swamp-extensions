@@ -1,7 +1,8 @@
 import { assertEquals, assertRejects } from "jsr:@std/assert@1";
 import { createModelTestContext } from "jsr:@swamp-club/swamp-testing";
-import { behavior, classifyCounter, evaluateHealth } from "../extensions/behaviors/vpp.ts";
+import { behavior, classifyCounter, evaluateHealth, evaluateVppcfg } from "../extensions/behaviors/vpp.ts";
 import type { Runner } from "../extensions/behaviors/_lib/vppctl.ts";
+import { diffBootFile } from "../extensions/behaviors/_lib/parse.ts";
 
 const fx = (name: string) => Deno.readTextFileSync(new URL(`./fixtures/${name}.txt`, import.meta.url));
 
@@ -10,6 +11,22 @@ function fakeRunner(overrides: Record<string, string> = {}): Runner & { calls: s
   const calls: string[][] = [];
   const fn = ((argv: string[]) => {
     calls.push(argv);
+    const joined = argv.join(" ");
+    const special = /\bvppcfg plan --novpp\b/.test(joined)
+      ? "vppcfg-render"
+      : /\bvppcfg plan\b/.test(joined)
+      ? "vppcfg-plan"
+      : /\bcat -- /.test(joined)
+      ? "cat"
+      : undefined;
+    if (special) {
+      const o = overrides[special];
+      return Promise.resolve(
+        o === undefined
+          ? { code: 1, stdout: "", stderr: "sudo: vppcfg: command not found" }
+          : { code: 0, stdout: o, stderr: "" },
+      );
+    }
     const cmd = argv[argv.length - 1];
     if (cmd in overrides) return Promise.resolve({ code: 0, stdout: overrides[cmd], stderr: "" });
     const name = cmd.replace(/^show /, "").replaceAll(" ", "_");
@@ -32,13 +49,16 @@ const globalArgs = {
   sshOptions: [],
   vppctl: "vppctl",
   timeoutSeconds: 5,
+  vppcfg: "vppcfg",
+  vppcfgConfig: "/etc/vpp/vppcfg.yaml",
+  vppcfgBootFile: "/etc/vpp/config/vppcfg.vpp",
 };
 
 Deno.test("health writes all resources and reports ok on a fresh node", async () => {
   const { context, getWrittenResources } = createModelTestContext({ globalArgs });
   const runner = fakeRunner();
   // deno-lint-ignore no-explicit-any
-  await behavior.methods.health.execute({ minErrorRate: 1, _runner: runner }, context as any);
+  await behavior.methods.health.execute({ minErrorRate: 1, checkVppcfg: true, _runner: runner }, context as any);
   const written = getWrittenResources();
   assertEquals(written.map((w) => w.name).sort(), ["errors", "health", "interfaces", "lcp", "version"]);
   const health = written.find((w) => w.name === "health")!.data;
@@ -222,7 +242,7 @@ Deno.test("health still works when linux-cp is not loaded", async () => {
   const { context, getWrittenResources } = createModelTestContext({ globalArgs });
   const runner = fakeRunner({ "show lcp": "show: unknown input `lcp'" });
   // deno-lint-ignore no-explicit-any
-  await behavior.methods.health.execute({ minErrorRate: 1, _runner: runner }, context as any);
+  await behavior.methods.health.execute({ minErrorRate: 1, checkVppcfg: true, _runner: runner }, context as any);
   const written = getWrittenResources();
   assertEquals(written.some((w) => w.name === "lcp"), false);
   const health = written.find((w) => w.name === "health")!.data as {
@@ -264,4 +284,107 @@ Deno.test("upgrade chain is ascending and ends at the behavior version", () => {
   const to = behavior.upgrades.map((u) => u.toVersion);
   assertEquals([...to].sort(), to);
   assertEquals(to[to.length - 1], behavior.version);
+});
+
+// Boot render as vppcfg 1.1.6 prints it (documentation names).
+const RENDER_OLD = `comment { vppcfg create: 3 CLI statement(s) follow }
+create sub TenGigabitEthernet3/0/2 2111 dot1q 2111 exact-match
+lcp create TenGigabitEthernet3/0/2 host-if e6
+comment { vppcfg sync: 2 CLI statement(s) follow }
+set interface ip address TenGigabitEthernet3/0/2.2111 192.0.2.116/24
+set interface state TenGigabitEthernet3/0/2.2111 up
+`;
+
+Deno.test("vppcfg: node without vppcfg is skipped quietly; health stays ok", async () => {
+  const { context, getWrittenResources } = createModelTestContext({ globalArgs });
+  // deno-lint-ignore no-explicit-any
+  await behavior.methods.health.execute({ minErrorRate: 1, checkVppcfg: true, _runner: fakeRunner() }, context as any);
+  const written = getWrittenResources();
+  assertEquals(written.some((w) => w.name === "vppcfg"), false);
+  assertEquals((written.find((w) => w.name === "health")!.data as { status: string }).status, "ok");
+});
+
+Deno.test("vppcfg: the pe01 case (auto-subint pair not in the YAML)", async () => {
+  const { context, getWrittenResources } = createModelTestContext({ globalArgs });
+  const runner = fakeRunner({
+    "vppcfg-plan": "comment { vppcfg prune: 1 CLI statement(s) follow }\nlcp delete TenGigabitEthernet3/0/2.2111\n",
+    "vppcfg-render": RENDER_OLD,
+    "cat": RENDER_OLD,
+  });
+  // deno-lint-ignore no-explicit-any
+  await behavior.methods.vppcfg.execute({ _runner: runner }, context as any);
+  const data = getWrittenResources()[0].data as Parameters<typeof evaluateVppcfg>[0];
+  assertEquals(data.managed, true);
+  assertEquals(data.running, { inSync: false, pending: ["lcp delete TenGigabitEthernet3/0/2.2111"] });
+  assertEquals(data.boot?.inSync, true);
+  assertEquals(evaluateVppcfg(data).map((f) => f.check), ["vppcfg-sub-lcp", "vppcfg-drift"]);
+  // vppcfg commands go through the same transport, with the configured paths
+  const plan = runner.calls.find((c) => c.includes("plan") && !c.includes("--novpp"))!;
+  assertEquals(plan.slice(0, 3), ["docker", "exec", "lab"]);
+  assertEquals(plan.slice(-4), ["vppcfg", "plan", "-c", "/etc/vpp/vppcfg.yaml"]);
+});
+
+Deno.test("vppcfg: stale boot file", async () => {
+  const rendered = RENDER_OLD.replace(
+    "lcp create TenGigabitEthernet3/0/2 host-if e6\n",
+    "lcp create TenGigabitEthernet3/0/2 host-if e6\nlcp create TenGigabitEthernet3/0/2.2111 host-if e6.2111\n",
+  );
+  const { context, getWrittenResources } = createModelTestContext({ globalArgs });
+  await behavior.methods.vppcfg.execute(
+    { _runner: fakeRunner({ "vppcfg-plan": "", "vppcfg-render": rendered, "cat": RENDER_OLD }) },
+    // deno-lint-ignore no-explicit-any
+    context as any,
+  );
+  const data = getWrittenResources()[0].data as Parameters<typeof evaluateVppcfg>[0];
+  assertEquals(data.running?.inSync, true);
+  assertEquals(data.boot?.missing, ["lcp create TenGigabitEthernet3/0/2.2111 host-if e6.2111"]);
+  assertEquals(data.boot?.extra, []);
+  const f = evaluateVppcfg(data);
+  assertEquals(f.map((x) => x.check), ["vppcfg-boot"]);
+});
+
+Deno.test("diffBootFile detects order changes", () => {
+  const a = "create sub X 1\nlcp create X host-if x\n";
+  const b = "lcp create X host-if x\ncreate sub X 1\n";
+  assertEquals(diffBootFile(a, b), { inSync: false, missing: [], extra: [], orderDiffers: true });
+  assertEquals(diffBootFile("comment { a }\n" + a, a + "\n").inSync, true);
+});
+
+Deno.test("vppcfg: other plan failures are reported, not hidden", () => {
+  const f = evaluateVppcfg({
+    node: "n",
+    collectedAt: "t",
+    config: "/etc/vpp/vppcfg.yaml",
+    bootFile: "/etc/vpp/config/vppcfg.vpp",
+    managed: true,
+    reason: "PermissionError: [Errno 13] Permission denied",
+  });
+  assertEquals(f.map((x) => `${x.level}:${x.check}`), ["info:vppcfg"]);
+});
+
+Deno.test("method argument names never collide with global argument names", () => {
+  // swamp fills method arguments from global arguments of the same name.
+  const globals = new Set(Object.keys(behavior.globalArguments.shape ?? {}));
+  assertEquals(globals.has("vppcfg"), true);
+  for (const [name, m] of Object.entries(behavior.methods)) {
+    // deno-lint-ignore no-explicit-any
+    const keys = Object.keys((m.arguments as any).shape ?? {});
+    assertEquals(keys.filter((k) => globals.has(k)), [], `method ${name}`);
+  }
+});
+
+Deno.test("vppcfg: a VLAN missing entirely from the YAML is drift, not a missing lcp", () => {
+  const f = evaluateVppcfg({
+    node: "n",
+    collectedAt: "t",
+    config: "/etc/vpp/vppcfg.yaml",
+    bootFile: "/etc/vpp/config/vppcfg.vpp",
+    managed: true,
+    running: {
+      inSync: false,
+      pending: ["lcp delete TenGigabitEthernet3/0/2.2111", "delete sub TenGigabitEthernet3/0/2.2111"],
+    },
+    boot: { checked: true, inSync: true, missing: [], extra: [], orderDiffers: false },
+  });
+  assertEquals(f.map((x) => x.check), ["vppcfg-drift"]);
 });

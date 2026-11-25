@@ -6,6 +6,9 @@
 import { z } from "npm:zod@4";
 import { stripAnsi } from "./parse.ts";
 
+/** Absolute path without shell metacharacters. */
+const SAFE_PATH = /^\/[A-Za-z0-9_.\/-]+$/;
+
 /** Connection settings for one VPP node (the behavior's global arguments). */
 export const NodeArgsSchema = z.object({
   transport: z.enum(["local", "docker", "ssh"]).default("local").describe(
@@ -33,6 +36,14 @@ export const NodeArgsSchema = z.object({
   timeoutSeconds: z.number().int().positive().default(30).describe(
     "Timeout for each vppctl call",
   ),
+  vppcfg: z.string().default("vppcfg").describe(
+    "vppcfg binary on the node (used read-only: plan, and plan --novpp)",
+  ),
+  vppcfgConfig: z.string().regex(SAFE_PATH).default("/etc/vpp/vppcfg.yaml")
+    .describe("vppcfg YAML on the node"),
+  vppcfgBootFile: z.string().regex(SAFE_PATH).default(
+    "/etc/vpp/config/vppcfg.vpp",
+  ).describe("CLI file rendered from the YAML that VPP execs at boot"),
 }).superRefine((v, ctx) => {
   if (v.transport === "ssh" && !v.host) {
     ctx.addIssue({
@@ -71,8 +82,9 @@ export type Runner = (
 
 /** Default runner: spawns the process with Deno.Command. */
 export const denoRunner: Runner = async (argv, signal) => {
-  // argv is built by buildArgv: a fixed vppctl/ssh/docker prefix plus one
-  // "show ..." command (assertShowCommand), quoted for the remote shell.
+  // argv is built by wrapArgv: a fixed ssh/docker/sudo prefix around one of
+  // the read-only commands in this module (vppctl "show ...", vppcfg plan,
+  // cat of the vppcfg boot file), quoted for the remote shell.
   // swamp-quality-ignore deno-command
   const out = await new Deno.Command(argv[0], {
     args: argv.slice(1),
@@ -98,13 +110,15 @@ export function shellQuote(word: string): string {
 
 /** Build the argv that runs one vppctl command on the node. */
 export function buildArgv(node: NodeArgs, command: string): string[] {
-  const inner = [
-    ...(node.sudo ? ["sudo", "-n"] : []),
-    node.vppctl,
-    "-s",
-    node.socket,
-    command,
-  ];
+  return wrapArgv(node, [node.vppctl, "-s", node.socket, command]);
+}
+
+/**
+ * Wrap a command for the node's transport (and sudo). Only called with the
+ * fixed read-only commands of this module: vppctl show, vppcfg plan, cat.
+ */
+export function wrapArgv(node: NodeArgs, command: string[]): string[] {
+  const inner = [...(node.sudo ? ["sudo", "-n"] : []), ...command];
   switch (node.transport) {
     case "local":
       return inner;
@@ -158,31 +172,7 @@ export class Vppctl {
   /** Run one `show` command and return its output with colour codes removed. */
   async show(command: string): Promise<string> {
     assertShowCommand(command);
-    const signal = AbortSignal.any([
-      this.signal,
-      AbortSignal.timeout(this.node.timeoutSeconds * 1000),
-    ]);
-    const argv = buildArgv(this.node, command);
-    let res: ProcResult;
-    try {
-      res = await this.runner(argv, signal);
-    } catch (err) {
-      if (err instanceof Deno.errors.NotFound) {
-        throw new Error(
-          `${
-            argv[0]
-          } not found on this host (transport ${this.node.transport})`,
-        );
-      }
-      if (signal.aborted && !this.signal.aborted) {
-        throw new Error(
-          `"${command}" on ${
-            describeNode(this.node)
-          } timed out after ${this.node.timeoutSeconds}s`,
-        );
-      }
-      throw err;
-    }
+    const res = await this.run(buildArgv(this.node, command), command);
     const stdout = stripAnsi(res.stdout);
     if (res.code !== 0) {
       throw new Error(
@@ -204,5 +194,61 @@ export class Vppctl {
       );
     }
     return stdout;
+  }
+
+  /**
+   * `vppcfg plan` (read-only): with `novpp`, the boot render of the YAML;
+   * without, the commands that would converge the running VPP to the YAML.
+   * Returns the CLI lines vppcfg prints on stdout.
+   */
+  async vppcfgPlan(novpp: boolean): Promise<ProcResult> {
+    const label = `vppcfg plan${novpp ? " --novpp" : ""}`;
+    return await this.run(
+      wrapArgv(this.node, [
+        this.node.vppcfg,
+        "plan",
+        ...(novpp ? ["--novpp"] : []),
+        "-c",
+        this.node.vppcfgConfig,
+      ]),
+      label,
+    );
+  }
+
+  /** Read a file on the node (the vppcfg boot file). */
+  async readFile(path: string): Promise<ProcResult> {
+    if (!SAFE_PATH.test(path)) throw new Error(`refusing to read "${path}"`);
+    return await this.run(
+      wrapArgv(this.node, ["cat", "--", path]),
+      `cat ${path}`,
+    );
+  }
+
+  private async run(argv: string[], label: string): Promise<ProcResult> {
+    const signal = AbortSignal.any([
+      this.signal,
+      AbortSignal.timeout(this.node.timeoutSeconds * 1000),
+    ]);
+    let res: ProcResult;
+    try {
+      res = await this.runner(argv, signal);
+    } catch (err) {
+      if (err instanceof Deno.errors.NotFound) {
+        throw new Error(
+          `${
+            argv[0]
+          } not found on this host (transport ${this.node.transport})`,
+        );
+      }
+      if (signal.aborted && !this.signal.aborted) {
+        throw new Error(
+          `"${label}" on ${
+            describeNode(this.node)
+          } timed out after ${this.node.timeoutSeconds}s`,
+        );
+      }
+      throw err;
+    }
+    return res;
   }
 }

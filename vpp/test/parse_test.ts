@@ -184,3 +184,29 @@ Deno.test("parseHardwareBrief", () => {
   assertEquals(hw.get("TenGigabitEthernet1/0/0"), { linkUp: false });
   assertEquals(hw.get("TenGigabitEthernet1/0/2"), { linkUp: true, speed: "10 Gbps" });
 });
+
+Deno.test("parseFib: detailed single-prefix lookup", () => {
+  // Shape of `show ip fib table 0 <prefix>` on VPP 26.06 (documentation addresses).
+  const f = parseFib(
+    "ipv4-VRF:0, fib_index:0, flow hash:[src dst sport dport proto flowlabel ] epoch:0 flags:none locks:[adjacency:1, default-route:1, lcp-rt:1, ]\r\n" +
+      "203.0.113.0/24 fib:0 index:125 locks:2\r\n" +
+      "  lcp-rt-dynamic refs:1 src-flags:added,contributing,active,\r\n" +
+      "    path-list:[142] locks:16196 flags:shared,popular, uPRF-list:124 len:1 itfs:[10, ]\r\n" +
+      "      path:[203] pl-index:142 ip4 weight=1 pref=32 attached-nexthop:  oper-flags:resolved,\r\n" +
+      "        192.0.2.64 TenGigabitEthernet3/0/2.2111\r\n" +
+      "      [@0]: ipv4 via 192.0.2.64 TenGigabitEthernet3/0/2.2111: mtu:1500 next:12 flags:[] 60c78dc824f0\r\n" +
+      "\r\n" +
+      " forwarding:   unicast-ip4-chain\r\n" +
+      "  [@0]: dpo-load-balance: [proto:ip4 index:128 buckets:1 uRPF:124 to:[7626230:583949843]]\r\n" +
+      "    [0] [@5]: ipv4 via 192.0.2.64 TenGigabitEthernet3/0/2.2111: mtu:1500 next:12 flags:[] 60c78dc824f0\r\n",
+  );
+  assertEquals(f.name, "ipv4-VRF:0");
+  assertEquals(f.entries.length, 1);
+  const e = f.entries[0];
+  assertEquals(e.prefix, "203.0.113.0/24");
+  assertEquals(e.sources, ["lcp-rt-dynamic"]);
+  assertEquals([e.packets, e.bytes], [7626230, 583949843]);
+  assertEquals(e.paths.map((p) => [p.kind, p.nextHop, p.interface]), [
+    ["via", "192.0.2.64", "TenGigabitEthernet3/0/2.2111"],
+  ]);
+});

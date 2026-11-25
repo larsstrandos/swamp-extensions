@@ -48,7 +48,9 @@ swamp data query 'modelName == "<node>" && name == "health"' --select content --
 ```
 
 `health` collects version, interfaces (with link state), lcp, errors, buffers,
-heap and threads in one call. It stores each of them and writes `findings`
+heap and threads in one call, and on vppcfg nodes also checks the YAML against
+the running VPP and the boot file (`vppcfg-*` findings; see
+[references/vppcfg.md](references/vppcfg.md)). It stores each of them and writes `findings`
 (critical / warning / info). Counter findings compare against the previous run,
 so on a node that has never been checked, run `health` twice, at least 10–30 s
 apart, before drawing conclusions from counters.
@@ -69,10 +71,11 @@ counter.
 | Which interfaces, link state, addresses, tables, Linux names? | `interfaces` | `interfaces` |
 | Which linux-cp pairs, in which netns, is lcp-sync on? | `lcp` | `lcp` |
 | Which VRFs exist? | `tables` | `tables` |
-| How does VPP forward prefix X in table T? | `fib --input table=T --input prefix=X` | `fib-ip4-T-<prefix>` |
+| How does VPP forward prefix X in table T, and who installed it? | `fib --input table=T --input prefix=X` (longest match; `sources` shows e.g. `lcp-rt-dynamic` = from Linux/BIRD) | `fib-ip4-T-<prefix>` |
 | How big is a table? (use this for full tables) | `fib --input table=T --input summary=true` | `fib-ip4-T` |
 | Is the next hop resolved (ARP/ND)? | `neighbors [--input interface=I]` | `neighbors` |
 | What is VPP dropping, and is it rising? | `errors` (run twice, check `delta`) | `errors` |
+| Does the node run what its vppcfg YAML says, now and after a reboot? | `vppcfg` | `vppcfg` |
 | Anything else | `show --input command="show ..."` | `show-<slug>` |
 
 For IPv6, add `--input family=ip6` to `fib`.
@@ -92,6 +95,9 @@ swamp data query 'modelName == "<node>" && name == "interfaces"' --select conten
   `via NH IF`, run `neighbors` for `IF` → if `NH` is missing there, it is an
   ARP/ND problem; otherwise run `errors` twice and look at the rising counters
   on the `IF` / `ip4-input` / `ip6-input` nodes.
+- **A Linux interface (e.g. a VLAN) is missing, or vppcfg wants to delete a
+  pair:** the node is probably managed by vppcfg; read
+  [references/vppcfg.md](references/vppcfg.md) before changing anything.
 - **Route is in Linux/Bird but not in VPP:** `lcp` (is there a pair for that
   interface? is linux-nl loaded?) → `interfaces` (is the VPP interface in the
   same table as the Linux VRF?). See
@@ -105,8 +111,12 @@ swamp data query 'modelName == "<node>" && name == "interfaces"' --select conten
 
 - Do not run vppctl by hand when a method covers the question. Use `show` for
   everything else, so the output is stored too.
-- The methods never change VPP. If the fix needs a `set ...` command, tell the
-  user the exact command and why, and let them run it or confirm it.
+- The methods never change VPP. If the fix needs a change, tell the user the
+  exact change and why, and let them run it or confirm it. On a node managed
+  by vppcfg (`/etc/vpp/vppcfg.yaml` exists), the change belongs in the YAML,
+  not in `vppctl`: follow the procedure in
+  [references/vppcfg.md](references/vppcfg.md), or it is lost at the next
+  boot.
 - Several nodes: run them in parallel, one `swamp behavior run` per node (each
   node is its own behavior, so they do not share a lock).
 - Large FIBs (full BGP tables): use `summary=true` or `prefix=`. Without them,

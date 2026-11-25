@@ -45,6 +45,9 @@ swamp behavior create @lstrandos/vpp/node pe01 \
 | `sshOptions` | `[]` | Extra ssh arguments |
 | `vppctl` | `vppctl` | vppctl path on the node |
 | `timeoutSeconds` | `30` | Timeout per vppctl call |
+| `vppcfg` | `vppcfg` | vppcfg binary on the node |
+| `vppcfgConfig` | `/etc/vpp/vppcfg.yaml` | vppcfg YAML on the node |
+| `vppcfgBootFile` | `/etc/vpp/config/vppcfg.vpp` | CLI file rendered from the YAML that VPP execs at boot |
 
 SSH uses your agent or `~/.ssh/config`. The extension needs no secrets.
 
@@ -52,13 +55,14 @@ SSH uses your agent or `~/.ssh/config`. The extension needs no secrets.
 
 | Method | Runs | Stores |
 | --- | --- | --- |
-| `health` | version, interface, interface addr, lcp, errors, buffers, memory main-heap, threads | all of the below plus `health` with `status` and `findings` |
+| `health` | version, interface, interface addr, hardware-interfaces, lcp, errors, buffers, memory main-heap, threads, and the `vppcfg` check | all of the below plus `health` with `status` and `findings` |
 | `interfaces` | `show interface`, `show interface addr`, `show hardware-interfaces brief`, `show lcp` | per interface: admin and link state, link speed, MTU, addresses with table id, counters, counter deltas, linux-cp name |
 | `lcp` | `show lcp` | linux-cp settings and pairs (with netns) |
 | `tables` | `show ip table`, `show ip6 table` | VRF tables |
-| `fib` | `show ip[6] fib table N [prefix]` | prefixes with paths (`via`, `glean`, `receive`, `drop`) and packet counters; `summary=true` for prefix-length counts only |
+| `fib` | `show ip[6] fib table N [prefix]` | prefixes with paths (`via`, `glean`, `receive`, `drop`) and packet counters; with `prefix=` the longest match and its `sources` (e.g. `lcp-rt-dynamic`: installed from Linux/BIRD); `summary=true` for prefix-length counts only (automatic above `maxEntries`) |
 | `neighbors` | `show ip neighbors [if]` | ARP/ND entries |
 | `errors` | `show errors` | error counters with deltas since the previous run |
+| `vppcfg` | `vppcfg plan`, `vppcfg plan --novpp`, `cat <boot file>` | drift between the running VPP and the YAML (what `vppcfg apply` would do), and between the boot file and the YAML |
 | `show` | any `show ...` | raw output |
 
 ```bash
@@ -81,6 +85,11 @@ swamp behavior run lab show --input command="show bond details"
     addresses counts as deliberately unused and is not reported)
   - rising rx/tx errors or rx-miss
   - rising error counters (see below)
+  - on vppcfg nodes: the running VPP differs from the YAML (`vppcfg-drift`),
+    the boot file is not the render of the YAML (`vppcfg-boot`), or a
+    sub-interface's linux-cp pair exists only because `lcp-auto-subint` made it
+    at runtime (`vppcfg-sub-lcp`: `vppcfg apply` would delete it, and it is
+    missing after a reboot)
 - **info**: linux-cp interfaces in non-default tables (the Linux side must be in
   the matching VRF, because lcp-sync does not sync table changes), or the
   linux-cp plugin not being loaded
@@ -98,12 +107,27 @@ Error counters are compared with the previous run and fall into four classes:
 swamp behavior run pe01 health --input minErrorRate=5
 ```
 
+## vppcfg nodes
+
+On a node managed by [vppcfg](https://git.ipng.ch/ipng/vppcfg), `vppcfg` (and
+`health`) compare three things: the YAML, the running VPP, and the boot file
+VPP execs at startup. Nodes without vppcfg or without the YAML are skipped
+quietly; `health --input checkVppcfg=false` turns the check off. `vppcfg plan`
+needs access to the VPP API socket, so such nodes usually need `sudo=true`.
+
+```bash
+swamp behavior run pe01 vppcfg
+swamp data query 'modelName == "pe01" && name == "vppcfg"' --select content --json \
+  | jq '.results[0] | {running, boot}'
+```
+
 ## What runs on your machine
 
-The behavior spawns exactly one process per call: `vppctl`, `docker`/`podman
-exec ... vppctl`, or `ssh ... vppctl`. Before anything is spawned, the command
-is checked to be a `show ...` command, so the extension cannot change VPP
-state. For SSH it uses `BatchMode=yes` (it never prompts) and quotes the remote
+The behavior spawns one process per call: `vppctl`, `vppcfg plan` (with or
+without `--novpp`, both read-only) or `cat` of the vppcfg boot file, directly,
+through `docker`/`podman exec`, or through `ssh`. vppctl commands are checked
+to be `show ...` commands before anything is spawned, so the extension cannot
+change VPP state. For SSH it uses `BatchMode=yes` (it never prompts) and quotes the remote
 command.
 
 ## Development

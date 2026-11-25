@@ -12,6 +12,7 @@
 import { z } from "npm:zod@4";
 import {
   type BufferPool,
+  diffBootFile,
   type ErrorCounter,
   type LcpState,
   mergeAddresses,
@@ -28,6 +29,7 @@ import {
   parseTables,
   parseThreads,
   parseVersion,
+  vppcfgCommands,
   type VppInterface,
 } from "./_lib/parse.ts";
 import {
@@ -159,6 +161,7 @@ const FibSchema = z.object({
     prefix: z.string(),
     packets: z.number(),
     bytes: z.number(),
+    sources: z.array(z.string()).optional(),
     paths: z.array(z.object({
       kind: z.enum(["via", "glean", "receive", "drop", "lookup", "other"]),
       nextHop: z.string().optional(),
@@ -229,6 +232,31 @@ const NeighborsSchema = z.object({
     ageSeconds: z.number(),
   })),
 });
+
+const VppcfgSchema = z.object({
+  ...Collected,
+  config: z.string(),
+  bootFile: z.string(),
+  /** vppcfg and its YAML exist on the node. */
+  managed: z.boolean(),
+  /** Why the check did not run (managed=false) or failed. */
+  reason: z.string().optional(),
+  running: z.object({
+    inSync: z.boolean(),
+    /** Commands `vppcfg apply` would run now. */
+    pending: z.array(z.string()),
+  }).optional(),
+  boot: z.object({
+    checked: z.boolean(),
+    reason: z.string().optional(),
+    inSync: z.boolean().optional(),
+    missing: z.array(z.string()).optional(),
+    extra: z.array(z.string()).optional(),
+    orderDiffers: z.boolean().optional(),
+  }).optional(),
+});
+
+type VppcfgData = z.infer<typeof VppcfgSchema>;
 
 const OutputSchema = z.object({
   ...Collected,
@@ -374,6 +402,129 @@ function seconds(from?: string, to?: string): number {
   return Number.isFinite(d) && d > 0 ? d : 1; // unknown interval: rate = delta
 }
 
+function firstLine(s: string): string {
+  return s.trim().split("\n").filter((l) => l.trim()).pop()?.trim().slice(
+    0,
+    300,
+  ) ?? "";
+}
+
+async function collectVppcfg(vpp: Vppctl, ctx: Ctx): Promise<VppcfgData> {
+  const g = ctx.globalArgs;
+  const base = {
+    node: describeNode(g),
+    collectedAt: now(),
+    config: g.vppcfgConfig,
+    bootFile: g.vppcfgBootFile,
+  };
+  const plan = await vpp.vppcfgPlan(false);
+  if (plan.code !== 0) {
+    const why = firstLine(plan.stderr || plan.stdout);
+    // Not a vppcfg node: no binary, or no YAML. Any other failure is reported.
+    const notManaged = plan.code === 127 ||
+      /command not found|Couldn't read config/.test(why);
+    return { ...base, managed: !notManaged, reason: why };
+  }
+  const pending = vppcfgCommands(plan.stdout);
+  const [render, disk] = await Promise.all([
+    vpp.vppcfgPlan(true),
+    vpp.readFile(g.vppcfgBootFile),
+  ]);
+  let boot: VppcfgData["boot"];
+  if (render.code !== 0) {
+    boot = {
+      checked: false,
+      reason: `render failed: ${firstLine(render.stderr)}`,
+    };
+  } else if (disk.code !== 0) {
+    boot = {
+      checked: false,
+      reason: firstLine(disk.stderr) || "boot file not readable",
+    };
+  } else {
+    boot = { checked: true, ...diffBootFile(render.stdout, disk.stdout) };
+  }
+  return {
+    ...base,
+    managed: true,
+    running: { inSync: pending.length === 0, pending },
+    boot,
+  };
+}
+
+/** Findings for a vppcfg-managed node. Exported for tests. */
+export function evaluateVppcfg(v: VppcfgData): z.infer<typeof FindingSchema>[] {
+  const f: z.infer<typeof FindingSchema>[] = [];
+  if (!v.managed) return f; // not a vppcfg node
+  if (!v.running) {
+    f.push({
+      level: "info",
+      check: "vppcfg",
+      message: `vppcfg plan failed: ${v.reason ?? "unknown error"}`,
+    });
+    return f;
+  }
+  const pending = v.running.pending;
+  if (pending.length) {
+    // Only when the sub-interface itself stays (is in the YAML): if the plan
+    // also deletes the sub-interface, the YAML lacks the whole VLAN, and the
+    // drift finding below covers that.
+    const deletedSubs = new Set(
+      pending.map((c) => c.match(/^delete sub (\S+)$/)?.[1]).filter(Boolean),
+    );
+    const subLcpDeletes = pending
+      .map((c) => c.match(/^lcp delete (\S+\.\d+)$/)?.[1])
+      .filter((x): x is string => !!x && !deletedSubs.has(x));
+    for (const sub of subLcpDeletes) {
+      f.push({
+        level: "warning",
+        check: "vppcfg-sub-lcp",
+        message:
+          `${v.config} has no lcp for sub-interface ${sub}, but its linux-cp pair exists (created at runtime by lcp-auto-subint). vppcfg apply would delete it, and it will be missing after a reboot. Add lcp: "<linux name>" to the sub-interface in the YAML.`,
+      });
+    }
+    f.push({
+      level: "warning",
+      check: "vppcfg-drift",
+      message:
+        `running VPP differs from ${v.config}: vppcfg apply would run ${pending.length} command(s): ${
+          pending.slice(0, 3).join("; ")
+        }${pending.length > 3 ? "; ..." : ""}`,
+    });
+  }
+  const b = v.boot;
+  if (b && !b.checked) {
+    f.push({
+      level: "info",
+      check: "vppcfg-boot",
+      message: `boot file not checked: ${b.reason}`,
+    });
+  } else if (b && !b.inSync) {
+    const parts = [
+      b.missing?.length
+        ? `${b.missing.length} command(s) missing (${
+          b.missing.slice(0, 2).join("; ")
+        }${b.missing.length > 2 ? "; ..." : ""})`
+        : "",
+      b.extra?.length
+        ? `${b.extra.length} extra (${b.extra.slice(0, 2).join("; ")}${
+          b.extra.length > 2 ? "; ..." : ""
+        })`
+        : "",
+      b.orderDiffers ? "same commands in a different order" : "",
+    ].filter(Boolean);
+    f.push({
+      level: "warning",
+      check: "vppcfg-boot",
+      message:
+        `${v.bootFile} is not the render of ${v.config}, so the next boot differs from the YAML: ${
+          parts.join(", ")
+        }. Re-render with vppcfg plan --novpp -o.`,
+    });
+  }
+  return f;
+}
+
 /** Pure health evaluation, exported for tests. */
 export function evaluateHealth(input: {
   interfaces: z.infer<typeof InterfacesSchema>;
@@ -517,6 +668,9 @@ export function evaluateHealth(input: {
 const NoArgs = z.object({});
 
 const HealthArgs = z.object({
+  checkVppcfg: z.boolean().default(true).describe(
+    "Also compare the running VPP and the boot file with the vppcfg YAML (skipped on nodes without vppcfg)",
+  ),
   minErrorRate: z.number().min(0).default(1).describe(
     "Report an error counter when it rises at least this many per second since the previous run (counters that mean lost traffic are always reported)",
   ),
@@ -552,7 +706,7 @@ function slug(s: string): string {
 /** VPP node diagnostics behavior. */
 export const behavior = {
   type: "@lstrandos/vpp/node",
-  version: "2026.11.25.4",
+  version: "2026.11.25.5",
   upgrades: [
     {
       toVersion: "2026.11.25.3",
@@ -564,6 +718,17 @@ export const behavior = {
       toVersion: "2026.11.25.4",
       description: "No global argument changes (admin-down interfaces)",
       upgradeAttributes: (old: Record<string, unknown>) => old,
+    },
+    {
+      toVersion: "2026.11.25.5",
+      description:
+        "Add vppcfg, vppcfgConfig and vppcfgBootFile global arguments (vppcfg drift check)",
+      upgradeAttributes: (old: Record<string, unknown>) => ({
+        vppcfg: "vppcfg",
+        vppcfgConfig: "/etc/vpp/vppcfg.yaml",
+        vppcfgBootFile: "/etc/vpp/config/vppcfg.vpp",
+        ...old,
+      }),
     },
   ],
   description:
@@ -615,6 +780,13 @@ export const behavior = {
     neighbors: {
       description: "ARP and IPv6 ND neighbor table",
       schema: NeighborsSchema,
+      lifetime: "infinite",
+      garbageCollection: 20,
+    },
+    vppcfg: {
+      description:
+        "vppcfg drift: running VPP and boot file compared with the YAML",
+      schema: VppcfgSchema,
       lifetime: "infinite",
       garbageCollection: 20,
     },
@@ -789,6 +961,15 @@ export const behavior = {
         });
         const interfaces = await collectInterfaces(vpp, ctx, lcp);
         const errors = await collectErrors(vpp, ctx);
+        const vppcfg = args.checkVppcfg === false
+          ? undefined
+          : await collectVppcfg(vpp, ctx)
+            .catch((err: Error) => {
+              ctx.logger.info("vppcfg check failed: {error}", {
+                error: err.message,
+              });
+              return undefined;
+            });
         const buffers = parseBuffers(buffersText);
         const heap = parseHeap(heapText);
         const version = parseVersion(versionText);
@@ -800,6 +981,7 @@ export const behavior = {
           heap,
           minErrorRate: args.minErrorRate ?? 1,
         });
+        if (vppcfg) findings.push(...evaluateVppcfg(vppcfg));
         if (!lcpLoaded) {
           findings.push({
             level: "info",
@@ -825,6 +1007,9 @@ export const behavior = {
           ...(lcpLoaded ? [await ctx.writeResource("lcp", "lcp", lcp)] : []),
           await ctx.writeResource("interfaces", "interfaces", interfaces),
           await ctx.writeResource("errors", "errors", errors),
+          ...(vppcfg?.managed
+            ? [await ctx.writeResource("vppcfg", "vppcfg", vppcfg)]
+            : []),
           await ctx.writeResource("health", "health", {
             node,
             collectedAt: now(),
@@ -878,6 +1063,26 @@ export const behavior = {
               },
             ),
           ],
+        };
+      },
+    },
+    vppcfg: {
+      description:
+        "Compare the running VPP (vppcfg plan) and the boot file (vppcfg plan --novpp vs the file on disk) with the vppcfg YAML. Read-only; needs sudo where the VPP API socket is not readable",
+      kind: "read",
+      arguments: NoArgs,
+      execute: async (args: Injected, ctx: Ctx) => {
+        const data = await collectVppcfg(session(args, ctx), ctx);
+        for (const x of evaluateVppcfg(data)) {
+          ctx.logger.info("[{level}] {check}: {message}", x);
+        }
+        if (!data.managed) {
+          ctx.logger.info("not managed by vppcfg: {reason}", {
+            reason: data.reason,
+          });
+        }
+        return {
+          dataHandles: [await ctx.writeResource("vppcfg", "vppcfg", data)],
         };
       },
     },

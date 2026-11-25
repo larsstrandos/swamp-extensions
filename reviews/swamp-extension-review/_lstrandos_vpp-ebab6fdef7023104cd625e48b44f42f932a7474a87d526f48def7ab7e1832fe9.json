@@ -1,0 +1,82 @@
+{
+  "extension": "@lstrandos/vpp",
+  "version": "2026.11.25.5",
+  "reviewedAt": "2026-11-25T13:41:52Z",
+  "dimensions": [
+    {
+      "id": "credentials-secrets",
+      "verdict": "pass",
+      "note": "No secrets handled; SSH defers to the user agent/ssh_config with BatchMode=yes. The vppcfg check runs vppcfg plan (read-only) and cat of the configured boot file, through sudo when sudo=true; paths are restricted to absolute paths without shell metacharacters. Whoever writes the node definition already has that SSH and sudo access."
+    },
+    {
+      "id": "logging-quality",
+      "verdict": "pass",
+      "note": "Structured logger placeholders; findings and lcp fallbacks logged."
+    },
+    {
+      "id": "error-handling",
+      "verdict": "pass",
+      "note": "vppctl: non-zero exit, unknown input (exit 0), socket errors, missing binary, timeouts become clear errors naming node and command. vppcfg: a missing binary or YAML means not managed and is skipped quietly; any other plan failure (e.g. permission) is reported as an info finding; a missing boot file is reported. health tolerates missing linux-cp, hardware-interfaces and vppcfg."
+    },
+    {
+      "id": "testing-completeness",
+      "verdict": "pass",
+      "note": "37 tests in test/: parsers (26.10 fixtures, 26.06 snippets incl. the detailed single-prefix FIB form), counter classes and rates, link and admin state, vppcfg drift (pe01 sub-LCP case, whole VLAN missing, stale boot file, order change, non-vppcfg node, other failures), upgrade chain order, method/global argument name collisions. Live: two edge routers over SSH+sudo (26.06): fib on full tables (1.08M v4 / 261k v6, summary fallback) and single prefixes, neighbors (133), show, vppcfg in sync, and vppcfg drift against an old YAML."
+    },
+    {
+      "id": "idempotency-resilience",
+      "verdict": "pass",
+      "note": "Read-only; counter deltas handle cleared counters; admin-down interfaces are not judged on counters."
+    },
+    {
+      "id": "api-contracts",
+      "verdict": "pass",
+      "note": "No HTTP. vppctl output formats checked against VPP 26.10 and 26.06; vppcfg 1.1.6 output streams and exit codes checked live (plan on stdout, logs on stderr, 255 for unreadable config, PermissionError without sudo)."
+    },
+    {
+      "id": "resource-management",
+      "verdict": "pass",
+      "note": "Each call has an AbortSignal (run signal + per-call timeout) passed to Deno.Command; stdin is null."
+    },
+    {
+      "id": "published-surface-hygiene",
+      "verdict": "pass",
+      "note": "Docs use RFC 5737/3849 addresses and example.net; router-derived test snippets contain only generic interface names, no real addresses; fixtures are outside the archive."
+    },
+    {
+      "id": "schema-strictness",
+      "verdict": "pass",
+      "note": "Every resource field declared; new vppcfg resource and fib sources written as declared; schema-write conformance rechecked; method argument names checked against global argument names (a collision broke health once)."
+    },
+    {
+      "id": "lifetime-gc",
+      "verdict": "pass",
+      "note": "infinite lifetime with version GC (5-50); raw show output 30d/10."
+    },
+    {
+      "id": "crud-completeness",
+      "verdict": "na",
+      "note": "Diagnostics only, every method is kind read by design."
+    },
+    {
+      "id": "preflight-checks",
+      "verdict": "na",
+      "note": "All methods are kind read, so checks would not run."
+    },
+    {
+      "id": "instance-names",
+      "verdict": "pass",
+      "note": "version/lcp/interfaces/errors/vppcfg shared by their method and health with the same schema (vppcfg only written by health when the node is managed); fib/neighbors/show names include family, table, prefix, interface or command slug."
+    },
+    {
+      "id": "data-access",
+      "verdict": "pass",
+      "note": "readResource used for previous interfaces/errors to compute deltas; failures fall back to no delta."
+    },
+    {
+      "id": "version-upgrades",
+      "verdict": "pass",
+      "note": "Upgrades .3 and .4 are no-ops; .5 adds vppcfg, vppcfgConfig and vppcfgBootFile with their defaults (existing values win). Verified live: an existing instance moved to .5 with the new arguments present. A test guards ascending order ending at the behavior version."
+    }
+  ]
+}

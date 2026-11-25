@@ -256,6 +256,12 @@ export interface FibEntry {
   bytes: number;
   /** Paths (buckets) of the load-balance. */
   paths: FibPath[];
+  /**
+   * Who installed the route, e.g. `lcp-rt-dynamic` (Linux / BIRD via
+   * linux-nl), `interface`, `CLI`. Only in the detailed output VPP prints for
+   * a single-prefix lookup.
+   */
+  sources?: string[];
 }
 
 /** Parsed `show ip[6] fib table N`. */
@@ -268,7 +274,9 @@ export interface Fib {
   entries: FibEntry[];
 }
 
-const PREFIX_RE = /^([0-9a-fA-F:.]+\/\d+)\s*$/;
+// A table listing prints the prefix alone; a single-prefix lookup prints the
+// detailed form "1.1.1.0/24 fib:0 index:125 locks:2".
+const PREFIX_RE = /^([0-9a-fA-F:.]+\/\d+)(?:\s+fib:\d+\b.*)?\s*$/;
 
 function parsePath(dpo: string): FibPath {
   let m = dpo.match(/^ipv[46] via (\S+) (\S+?):/);
@@ -282,7 +290,10 @@ function parsePath(dpo: string): FibPath {
   return { kind: "other", raw: dpo };
 }
 
-/** Parse `show ip fib table N` / `show ip6 fib table N` (default, non-detail). */
+/**
+ * Parse `show ip fib table N` / `show ip6 fib table N`, and the detailed output
+ * of a single-prefix lookup (`show ip fib table N <prefix>`).
+ */
 export function parseFib(text: string): Fib {
   const fib: Fib = { entries: [] };
   let cur: FibEntry | undefined;
@@ -300,6 +311,11 @@ export function parseFib(text: string): Fib {
       continue;
     }
     if (!cur) continue;
+    const src = line.match(/^ {2}([a-zA-Z][\w-]*) refs:\d+/);
+    if (src) {
+      cur.sources = [...new Set([...(cur.sources ?? []), src[1]])];
+      continue;
+    }
     const lb = line.match(/dpo-load-balance: .*?to:\[(\d+):(\d+)\]/);
     if (lb) {
       cur.packets = Number(lb[1]);
@@ -516,4 +532,50 @@ export function parseNeighbors(text: string): Neighbor[] {
     });
   }
   return out;
+}
+
+/** CLI commands in vppcfg output, without `comment { ... }` lines and blanks. */
+export function vppcfgCommands(text: string): string[] {
+  return stripAnsi(text).split("\n").map((l) => l.trim()).filter((l) =>
+    l !== "" && !l.startsWith("comment {")
+  );
+}
+
+/** Result of comparing the boot file with a fresh render of the YAML. */
+export interface BootFileDiff {
+  /** Same commands in the same order. */
+  inSync: boolean;
+  /** In the render but not in the boot file (what the next boot would miss). */
+  missing: string[];
+  /** In the boot file but not in the render (what the next boot would still do). */
+  extra: string[];
+  /** Same commands, different order (order matters at boot, e.g. for LCPs). */
+  orderDiffers: boolean;
+}
+
+/** Compare the boot file on disk with `vppcfg plan --novpp` of the YAML. */
+export function diffBootFile(rendered: string, onDisk: string): BootFileDiff {
+  const want = vppcfgCommands(rendered);
+  const have = vppcfgCommands(onDisk);
+  const count = (xs: string[]) => {
+    const m = new Map<string, number>();
+    for (const x of xs) m.set(x, (m.get(x) ?? 0) + 1);
+    return m;
+  };
+  const sub = (a: string[], b: Map<string, number>) => {
+    const left = new Map(b);
+    return a.filter((x) => {
+      const n = left.get(x) ?? 0;
+      if (n > 0) {
+        left.set(x, n - 1);
+        return false;
+      }
+      return true;
+    });
+  };
+  const missing = sub(want, count(have));
+  const extra = sub(have, count(want));
+  const sameSet = missing.length === 0 && extra.length === 0;
+  const orderDiffers = sameSet && want.some((x, i) => have[i] !== x);
+  return { inSync: sameSet && !orderDiffers, missing, extra, orderDiffers };
 }
