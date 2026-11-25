@@ -7,6 +7,7 @@ version and tests.
 | Folder | Package | What it does |
 | --- | --- | --- |
 | [`vpp/`](vpp/) | `@lstrandos/vpp` | Read-only fd.io VPP diagnostics through vppctl, plus the `vpp-diagnostics` skill |
+| [`vppcfg/`](vppcfg/) | `@lstrandos/vppcfg` | Plan, approve and apply vppcfg YAML with backups, boot-file re-render and a BIRD check, plus the `vppcfg-change` skill |
 
 ## Layout
 
@@ -35,9 +36,9 @@ swamp behavior type search vpp
 
 ```bash
 export SWAMP_EXTENSION_REVIEW_DIR=$PWD/reviews
-ext=vpp
+ext=vpp   # or vppcfg
 
-~/.swamp/deno/deno test --allow-read $ext/test/
+~/.swamp/deno/deno test --allow-read --allow-write $ext/test/
 swamp extension version --manifest $ext/manifest.yaml --json   # next CalVer
 swamp extension fmt $ext/manifest.yaml --extensions-dir $ext
 swamp extension quality $ext/manifest.yaml --extensions-dir $ext
@@ -51,6 +52,18 @@ puts a copy of each skill in the root `.claude/skills/`. Without the flag, the
 skill exists under two roots.
 
 ## Smoke tests
+
+`vppcfg/test/lab/` builds a VPP 26.06 + vppcfg + BIRD container that boots
+like a vppcfg router; the `lab-vpp` and `lab-cfg` nodes point at it:
+
+```bash
+docker build -t vppcfg-lab:26.06 vppcfg/test/lab
+docker run -d --privileged --name vppcfg-lab vppcfg-lab:26.06
+swamp behavior run lab-vpp health
+swamp behavior run lab-cfg plan
+```
+
+The older harness:
 
 The `lab` node (`models/`) points at the container from the VPP + Bird VRF
 harness (`./run.sh --keep`, container `vpp-bird-vrf-test`):

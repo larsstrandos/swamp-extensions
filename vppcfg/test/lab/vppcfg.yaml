@@ -1,0 +1,20 @@
+interfaces:
+  host-p0:
+    mtu: 9000
+    lcp: "e0"
+  host-p1:
+    mtu: 9000
+    lcp: "e1"
+    addresses: [ 192.0.2.1/31, 2001:db8::1/64 ]
+    sub-interfaces:
+      2111:
+        mtu: 1500
+        lcp: "e1.2111"
+        encapsulation:
+          dot1q: 2111
+          exact-match: true
+        addresses: [ 198.51.100.1/24 ]
+loopbacks:
+  loop0:
+    lcp: "lo0"
+    addresses: [ 192.0.2.255/32, 2001:db8:b00b::/128 ]

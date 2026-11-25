@@ -1,0 +1,19 @@
+type: '@lstrandos/vpp/node'
+typeVersion: 2026.11.25.5
+id: 0a72f662-c036-46d9-aa11-a279e6f975f8
+name: lab-vpp
+version: 1
+tags: {}
+globalArguments:
+  transport: docker
+  container: vppcfg-lab
+  containerRuntime: docker
+  socket: /run/vpp/cli.sock
+  sudo: false
+  sshOptions: []
+  vppctl: vppctl
+  timeoutSeconds: 30
+  vppcfg: vppcfg
+  vppcfgConfig: /etc/vpp/vppcfg.yaml
+  vppcfgBootFile: /etc/vpp/config/vppcfg.vpp
+methods: {}

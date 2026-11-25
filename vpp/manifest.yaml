@@ -1,8 +1,8 @@
 manifestVersion: 1
 name: "@lstrandos/vpp"
-version: "2026.11.25.7"
+version: "2026.11.25.8"
 license: Apache-2.0
-visibility: private
+visibility: public
 repository: "https://github.com/larsstrandos/swamp-extensions"
 description: >-
   Read-only diagnostics for fd.io VPP nodes through vppctl (local, docker/podman

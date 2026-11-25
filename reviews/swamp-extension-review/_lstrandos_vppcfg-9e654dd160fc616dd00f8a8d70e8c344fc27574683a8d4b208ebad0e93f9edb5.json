@@ -1,0 +1,82 @@
+{
+  "extension": "@lstrandos/vppcfg",
+  "version": "2026.11.25.1",
+  "reviewedAt": "2026-11-25T14:20:49Z",
+  "dimensions": [
+    {
+      "id": "credentials-secrets",
+      "verdict": "pass",
+      "note": "No secrets handled. SSH uses the agent/ssh_config with BatchMode=yes. Commands run through sudo -n by default because vppcfg needs the VPP API socket and installing the YAML needs root; the fixed command set and absolute-path checks are documented in the README."
+    },
+    {
+      "id": "logging-quality",
+      "verdict": "pass",
+      "note": "plan logs command/risky/diff counts; apply logs residual plans and lost BIRD protocols; errors name the node and the command."
+    },
+    {
+      "id": "error-handling",
+      "verdict": "pass",
+      "note": "apply refuses: no valid plan, a YAML whose SHA-256 differs from the approved plan, a re-plan that differs from the approved commands, risky lines without allowRisky. A failed vppcfg apply restores the YAML and records status failed. A failure after a successful apply (render, boot install, BIRD) still writes an applied record with status failed and how to recover. plan records an invalid YAML and fails."
+    },
+    {
+      "id": "testing-completeness",
+      "verdict": "pass",
+      "note": "12 unit tests with a fake node (file system, simulated vppcfg and BIRD) cover every guard, backups, boot re-render, BIRD loss, restore on failure, failure after apply, fetch, and argument-name collisions. End-to-end in a VPP 26.06 + vppcfg 1.3.1 + BIRD lab: workflow stops on risky lines, suspends for approval, applies, verifies, health ok; restart from the applied boot file keeps the change; manual VPP change after the plan is refused; rollback from backup. Read-only against a production router with vppcfg 1.1.6 and BIRD 2.19: routing parses 43 protocols, plan of the current YAML is a noop and leaves nothing behind."
+    },
+    {
+      "id": "idempotency-resilience",
+      "verdict": "pass",
+      "note": "plan is repeatable and cleans its staging file. apply of an already-applied YAML has an empty command list and only refreshes backups and the boot file. Staging files are removed in finally blocks."
+    },
+    {
+      "id": "api-contracts",
+      "verdict": "pass",
+      "note": "No HTTP. vppcfg check/plan/plan --novpp/apply exit codes and output streams verified against vppcfg 1.1.6 (router) and 1.3.1 (lab); birdc show protocols format verified against BIRD 2.0.12 and 2.19.2."
+    },
+    {
+      "id": "resource-management",
+      "verdict": "pass",
+      "note": "Every remote command has an AbortSignal (run signal plus timeoutSeconds). Staging files under /tmp are removed in finally; stage/unstage refuse paths outside /tmp."
+    },
+    {
+      "id": "published-surface-hygiene",
+      "verdict": "pass",
+      "note": "Docs and tests use RFC 5737/3849 addresses, example.net and generic interface names; the lab uses documentation addresses; no real router data in the repo."
+    },
+    {
+      "id": "schema-strictness",
+      "verdict": "pass",
+      "note": "Schema-write conformance checked for yaml, plan (valid and invalid branches), applied (applied, failed, failed-after-apply) and routing. Method argument names are checked against global argument names by a test."
+    },
+    {
+      "id": "lifetime-gc",
+      "verdict": "pass",
+      "note": "applied keeps 200 versions as an audit trail; plan and yaml 50; routing 20; all infinite lifetime."
+    },
+    {
+      "id": "crud-completeness",
+      "verdict": "pass",
+      "note": "fetch (read), plan (dry run), apply (change), routing (read). Rollback is plan+apply of a backup via remoteFile, documented."
+    },
+    {
+      "id": "preflight-checks",
+      "verdict": "na",
+      "note": "No separate checks; apply validates its own preconditions (plan, hash, re-plan, risky) before touching the node, which a check could not do without the plan data."
+    },
+    {
+      "id": "instance-names",
+      "verdict": "pass",
+      "note": "One instance per spec: yaml, plan, applied, routing."
+    },
+    {
+      "id": "data-access",
+      "verdict": "pass",
+      "note": "apply reads the latest plan with readResource and requires its hash and commands to match."
+    },
+    {
+      "id": "version-upgrades",
+      "verdict": "na",
+      "note": "Initial version."
+    }
+  ]
+}

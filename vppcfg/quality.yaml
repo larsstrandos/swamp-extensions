@@ -1,0 +1,4 @@
+version: 1
+accept:
+  - rule: behavior-spelling
+    reason: all clients run current swamp

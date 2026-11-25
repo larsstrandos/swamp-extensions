@@ -31,6 +31,10 @@ that is applied but not re-rendered is lost at the next boot too.
 
 ## The safe change procedure
 
+The `@lstrandos/vppcfg` extension automates this, with an approval gate:
+`swamp workflow run @lstrandos/vppcfg-change` (see its `vppcfg-change`
+skill). Use it when it is installed; by hand, the steps are:
+
 1. Back up the YAML and `vppcfg.vpp`.
 2. Edit a copy, then run `vppcfg check -c <copy>` and `vppcfg plan -c <copy>`.
    The plan must contain exactly the intended lines; stop otherwise.

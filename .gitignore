@@ -19,3 +19,5 @@
 # Behavior instances for real infrastructure stay local; only the lab node is shared.
 /models/**/*.yaml
 !/models/@lstrandos/vpp/node/lab.yaml
+!/models/@lstrandos/vpp/node/lab-vpp.yaml
+!/models/@lstrandos/vppcfg/node/lab-cfg.yaml

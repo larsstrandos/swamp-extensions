@@ -1,0 +1,152 @@
+id: aa9c5c45-584b-4691-9197-b060496c0632
+name: "@lstrandos/vppcfg-change"
+description: >-
+  Change a vppcfg-managed VPP node: plan the YAML, refuse risky lines unless
+  allowRisky, wait for manual approval, apply exactly the approved plan
+  (backups, boot file re-render, BIRD before/after), then verify. Approve with
+  `swamp workflow approve @lstrandos/vppcfg-change approve --resume`.
+tags:
+  extension: "@lstrandos/vppcfg"
+inputs:
+  type: object
+  properties:
+    node:
+      type: string
+      description: Name of the @lstrandos/vppcfg/node behavior
+    file:
+      type: string
+      description: Local YAML to apply (relative to the swamp repo, or absolute)
+    allowRisky:
+      type: boolean
+      description: Allow deletes, address removal, interfaces going down, table moves
+      default: false
+    settleSeconds:
+      type: integer
+      description: Wait after apply before the second BIRD snapshot
+      default: 15
+    vppNode:
+      type: string
+      description: Optional @lstrandos/vpp/node to run health on afterwards ("" to skip)
+      default: ""
+  required: [node, file]
+jobs:
+  - name: plan
+    description: Check and plan the YAML against the running VPP (changes nothing)
+    steps:
+      - name: plan
+        task:
+          type: behavior
+          behavior: ${{ inputs.node }}
+          methodName: plan
+          inputs:
+            file: ${{ inputs.file }}
+        dependsOn: []
+        weight: 0
+        allowFailure: false
+    dependsOn: []
+    weight: 0
+  - name: gate
+    description: Refuse risky plans unless allowed, then wait for a person
+    steps:
+      - name: risky
+        description: no risky commands, or allowRisky
+        task:
+          type: assert
+          expr: >-
+            size(data.latest(inputs.node, "plan").attributes.risky) == 0 || inputs.allowRisky
+          message: >-
+            The plan has risky commands (deletes, address removal, interfaces
+            down or table moves). Read them with: swamp data query
+            'modelName == "${{ inputs.node }}" && name == "plan"' --select content.
+            Run again with allowRisky=true if they are intended.
+          severity: high
+        dependsOn: []
+        weight: 0
+        allowFailure: false
+      - name: approve
+        description: A person approves exactly this plan
+        task:
+          type: manual_approval
+          prompt: >-
+            Apply ${{ inputs.file }} to ${{ inputs.node }}? Review the plan first
+            (YAML diff, commands, risky lines, boot-file change):
+            swamp data query 'modelName == "${{ inputs.node }}" && name == "plan"' --select content
+          timeout: 86400
+        dependsOn:
+          - step: risky
+            condition:
+              type: succeeded
+        weight: 0
+        allowFailure: false
+    dependsOn:
+      - job: plan
+        condition:
+          type: succeeded
+    weight: 0
+  - name: apply
+    description: Apply exactly the approved plan
+    steps:
+      - name: apply
+        task:
+          type: behavior
+          behavior: ${{ inputs.node }}
+          methodName: apply
+          inputs:
+            file: ${{ inputs.file }}
+            allowRisky: ${{ inputs.allowRisky }}
+            settleSeconds: ${{ inputs.settleSeconds }}
+        dependsOn: []
+        weight: 0
+        allowFailure: false
+    dependsOn:
+      - job: gate
+        condition:
+          type: succeeded
+    weight: 0
+  - name: verify
+    description: Routing intact, VPP and boot file match the YAML, node healthy
+    steps:
+      - name: bird-unchanged
+        description: no BIRD protocol that was up went down
+        task:
+          type: assert
+          expr: >-
+            size(data.latest(inputs.node, "applied").attributes.bird.lost) == 0
+          message: >-
+            BIRD protocols went down after the apply. See the bird section of:
+            swamp data query 'modelName == "${{ inputs.node }}" && name == "applied"' --select content.
+            Backups of the YAML and boot file are listed there.
+          severity: high
+        dependsOn: []
+        weight: 0
+        allowFailure: false
+      - name: converged
+        description: vppcfg plans nothing more and the boot file is the new render
+        task:
+          type: assert
+          expr: >-
+            size(data.latest(inputs.node, "applied").attributes.residualPlan) == 0 &&
+            data.latest(inputs.node, "applied").attributes.bootFileUpdated
+          message: >-
+            After the apply, vppcfg still plans commands or the boot file was
+            not updated; see the applied data of ${{ inputs.node }}.
+          severity: medium
+        dependsOn: []
+        weight: 0
+        allowFailure: false
+      - name: health
+        description: '@lstrandos/vpp health, when vppNode is given'
+        guard: ${{ inputs.vppNode == "" }}
+        task:
+          type: behavior
+          behavior: ${{ inputs.vppNode }}
+          methodName: health
+        dependsOn: []
+        weight: 0
+        allowFailure: false
+    dependsOn:
+      - job: apply
+        condition:
+          type: succeeded
+    weight: 0
+version: 1

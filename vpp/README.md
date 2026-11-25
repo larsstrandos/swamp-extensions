@@ -9,8 +9,12 @@ Each node is one `@lstrandos/vpp/node` behavior, reached with `vppctl`:
 
 Methods run only `show` commands. They parse the output into typed data and
 store it, so it can be queried with CEL and compared between runs (counter
-deltas). Tested against VPP 26.10 (lab, linux-cp/linux-nl) and 26.06 (an edge
-router with DPDK, workers and linux-cp in a netns).
+deltas). Tested against VPP 26.10 (lab, linux-cp/linux-nl) and 26.06 (edge
+routers with DPDK, workers and linux-cp in a netns), over the `ssh` and
+`docker` transports; `local` and `podman` are covered by unit tests only.
+
+To change a vppcfg-managed node, use [`@lstrandos/vppcfg`](https://github.com/larsstrandos/swamp-extensions/tree/main/vppcfg), which
+plans, gates and applies YAML changes; this extension only reads.
 
 The extension also ships the `vpp-diagnostics` skill. It tells an agent which
 method to use for which question and lists the known linux-cp/VRF/Bird pitfalls.

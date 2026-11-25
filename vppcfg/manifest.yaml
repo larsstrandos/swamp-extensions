@@ -1,0 +1,33 @@
+manifestVersion: 1
+name: "@lstrandos/vppcfg"
+version: "2026.11.25.1"
+license: Apache-2.0
+visibility: public
+repository: "https://github.com/larsstrandos/swamp-extensions"
+description: >-
+  Change vppcfg-managed VPP nodes safely: plan a YAML against the running VPP,
+  refuse risky lines unless allowed, apply only the approved plan with backups
+  and a re-rendered boot file, and compare BIRD before and after. Ships the
+  @lstrandos/vppcfg-change workflow (with a manual approval gate) and a skill.
+behaviors:
+  - vppcfg.ts
+skills:
+  - vppcfg-change
+workflows:
+  - workflow-vppcfg-change.yaml
+dependencies:
+  - "@lstrandos/vpp"
+additionalFiles:
+  - README.md
+  - LICENSE
+platforms:
+  - linux-x86_64
+  - linux-aarch64
+  - darwin-x86_64
+  - darwin-aarch64
+labels:
+  - vpp
+  - vppcfg
+  - fdio
+  - networking
+  - change-management

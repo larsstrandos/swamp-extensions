@@ -1,7 +1,7 @@
 {
   "extension": "@lstrandos/vpp",
-  "version": "2026.11.25.7",
-  "reviewedAt": "2026-11-25T14:07:52Z",
+  "version": "2026.11.25.8",
+  "reviewedAt": "2026-11-25T14:20:49Z",
   "dimensions": [
     {
       "id": "credentials-secrets",
@@ -76,7 +76,7 @@
     {
       "id": "version-upgrades",
       "verdict": "pass",
-      "note": "Manifest-only release (README: SSH ControlMaster); behavior version stays 2026.11.25.5 with its upgrade chain, guarded by a test."
+      "note": "Docs-only release (README and skill point to @lstrandos/vppcfg for changes; tested transports stated); behavior version stays 2026.11.25.5."
     }
   ]
 }
