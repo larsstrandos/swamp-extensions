@@ -63,6 +63,16 @@ no buffers, MTU exceeded, rx miss) on any increase; everything else from
 including the filtered ones, read the `errors` data, which has a `delta` per
 counter.
 
+For several nodes at once, run the workflow instead of one `health` per node:
+
+```bash
+echo '{"nodes":["pe01","pe02"]}' | swamp workflow run @lstrandos/vpp-health --stdin --json \
+  | jq '[.jobs[].steps[] | {name, status}]'
+```
+
+`reachable-<node>` fails when a node could not be checked or is critical,
+`ok-<node>` when it has warnings. Then read that node's `health` data.
+
 ## 3. Pick the method for the question
 
 | Question | Method | Data name |
@@ -117,8 +127,9 @@ swamp data query 'modelName == "<node>" && name == "interfaces"' --select conten
   not in `vppctl`: follow the procedure in
   [references/vppcfg.md](references/vppcfg.md), or it is lost at the next
   boot.
-- Several nodes: run them in parallel, one `swamp behavior run` per node (each
-  node is its own behavior, so they do not share a lock).
+- Several nodes: use the `@lstrandos/vpp-health` workflow (above), or run
+  them in parallel, one `swamp behavior run` per node (each node is its own
+  behavior, so they do not share a lock).
 - Large FIBs (full BGP tables): use `summary=true` or `prefix=`. Without them,
   `fib` refuses tables larger than `maxEntries` (default 5000) and stores only
   the summary.

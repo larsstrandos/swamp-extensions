@@ -107,6 +107,29 @@ Error counters are compared with the previous run and fall into four classes:
 swamp behavior run pe01 health --input minErrorRate=5
 ```
 
+## All nodes at once: the `@lstrandos/vpp-health` workflow
+
+The extension ships a workflow that runs `health` on a list of nodes in
+parallel and then asserts per node:
+
+| Step | Severity | Fails when |
+| --- | --- | --- |
+| `reachable-<node>` | high | `health` did not produce fresh data in this run (node unreachable, method failed), or the node is `critical` |
+| `ok-<node>` | medium | the node is not `ok` (any warning) |
+
+An unreachable node does not stop the others; old data from an earlier run
+never counts as a pass.
+
+```bash
+echo '{"nodes":["pe01","pe02"]}' | swamp workflow run @lstrandos/vpp-health --stdin
+
+# fail only on unreachable or critical nodes (e.g. for cron or CI)
+echo '{"nodes":["pe01","pe02"]}' | swamp workflow run @lstrandos/vpp-health --stdin --fail-on high
+```
+
+The exit code is non-zero when the run fails. Optional input: `minErrorRate`
+(passed to `health`).
+
 ## vppcfg nodes
 
 On a node managed by [vppcfg](https://git.ipng.ch/ipng/vppcfg), `vppcfg` (and

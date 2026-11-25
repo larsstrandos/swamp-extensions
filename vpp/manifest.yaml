@@ -1,6 +1,6 @@
 manifestVersion: 1
 name: "@lstrandos/vpp"
-version: "2026.11.25.5"
+version: "2026.11.25.6"
 license: Apache-2.0
 visibility: private
 repository: "https://github.com/larsstrandos/swamp-extensions"
@@ -12,6 +12,8 @@ behaviors:
   - vpp.ts
 skills:
   - vpp-diagnostics
+workflows:
+  - workflow-vpp-health.yaml
 additionalFiles:
   - README.md
   - LICENSE

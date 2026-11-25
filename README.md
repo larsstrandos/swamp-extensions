@@ -19,7 +19,8 @@ version and tests.
 ├── .claude/skills/<skill>/  # skills (shipped)
 └── test/                    # tests and fixtures (not shipped)
 reviews/                     # adversarial review reports, bound to the content hash
-models/                      # dev/smoke-test behavior instances
+workflows/                   # workflows; shipped ones are named @lstrandos/... and listed in a manifest
+models/                      # dev/smoke-test behavior instances (only lab is committed)
 ```
 
 The repo root is a swamp repo for development. Each extension is loaded as a

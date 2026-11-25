@@ -1,7 +1,7 @@
 {
   "extension": "@lstrandos/vpp",
-  "version": "2026.11.25.5",
-  "reviewedAt": "2026-11-25T13:41:52Z",
+  "version": "2026.11.25.6",
+  "reviewedAt": "2026-11-25T14:06:13Z",
   "dimensions": [
     {
       "id": "credentials-secrets",
@@ -16,17 +16,17 @@
     {
       "id": "error-handling",
       "verdict": "pass",
-      "note": "vppctl: non-zero exit, unknown input (exit 0), socket errors, missing binary, timeouts become clear errors naming node and command. vppcfg: a missing binary or YAML means not managed and is skipped quietly; any other plan failure (e.g. permission) is reported as an info finding; a missing boot file is reported. health tolerates missing linux-cp, hardware-interfaces and vppcfg."
+      "note": "vppctl: non-zero exit, unknown input (exit 0), socket errors, missing binary, timeouts become clear errors naming node and command. vppcfg: a missing binary or YAML means not managed and is skipped quietly; any other plan failure (e.g. permission) is reported as an info finding; a missing boot file is reported. health tolerates missing linux-cp, hardware-interfaces and vppcfg. The workflow sets allowFailure on the health steps and runs the verdict job on condition always, so every node is judged."
     },
     {
       "id": "testing-completeness",
       "verdict": "pass",
-      "note": "37 tests in test/: parsers (26.10 fixtures, 26.06 snippets incl. the detailed single-prefix FIB form), counter classes and rates, link and admin state, vppcfg drift (pe01 sub-LCP case, whole VLAN missing, stale boot file, order change, non-vppcfg node, other failures), upgrade chain order, method/global argument name collisions. Live: two edge routers over SSH+sudo (26.06): fib on full tables (1.08M v4 / 261k v6, summary fallback) and single prefixes, neighbors (133), show, vppcfg in sync, and vppcfg drift against an old YAML."
+      "note": "37 tests in test/: parsers (26.10 fixtures, 26.06 snippets incl. the detailed single-prefix FIB form), counter classes and rates, link and admin state, vppcfg drift (pe01 sub-LCP case, whole VLAN missing, stale boot file, order change, non-vppcfg node, other failures), upgrade chain order, method/global argument name collisions. Live: two edge routers over SSH+sudo (26.06): fib on full tables (1.08M v4 / 261k v6, summary fallback) and single prefixes, neighbors (133), show, vppcfg in sync, and vppcfg drift against an old YAML. Workflow @lstrandos/vpp-health tested live: two PEs pass; an unreachable node fails reachable/ok without stopping the others; a node whose stored health is ok but which is unreachable now fails (freshness check against run.startedAt); a warning node fails the run by default and passes with --fail-on high."
     },
     {
       "id": "idempotency-resilience",
       "verdict": "pass",
-      "note": "Read-only; counter deltas handle cleared counters; admin-down interfaces are not judged on counters."
+      "note": "Read-only; counter deltas handle cleared counters; admin-down interfaces are not judged on counters. The workflow only reads (health) and asserts; reruns are safe."
     },
     {
       "id": "api-contracts",
@@ -41,7 +41,7 @@
     {
       "id": "published-surface-hygiene",
       "verdict": "pass",
-      "note": "Docs use RFC 5737/3849 addresses and example.net; router-derived test snippets contain only generic interface names, no real addresses; fixtures are outside the archive."
+      "note": "Docs use RFC 5737/3849 addresses and example.net; router-derived test snippets contain only generic interface names, no real addresses; fixtures are outside the archive. The shipped workflow names no nodes; nodes come from the nodes input."
     },
     {
       "id": "schema-strictness",
@@ -76,7 +76,7 @@
     {
       "id": "version-upgrades",
       "verdict": "pass",
-      "note": "Upgrades .3 and .4 are no-ops; .5 adds vppcfg, vppcfgConfig and vppcfgBootFile with their defaults (existing values win). Verified live: an existing instance moved to .5 with the new arguments present. A test guards ascending order ending at the behavior version."
+      "note": "Manifest-only release for the workflow (2026.11.25.6); behavior version stays 2026.11.25.5 with its upgrade chain (.3, .4 no-op; .5 adds the vppcfg global arguments with defaults), guarded by a test."
     }
   ]
 }

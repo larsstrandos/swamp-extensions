@@ -1,0 +1,86 @@
+id: 1ea33c21-4f6b-4214-824e-195d3587fb10
+name: "@lstrandos/vpp-health"
+description: >-
+  Run health on every given @lstrandos/vpp/node in parallel, then assert per
+  node. "reachable" (severity high) fails when health did not run this time or
+  the node is critical; "ok" (severity medium) fails on any warning. Use
+  `swamp workflow run @lstrandos/vpp-health --fail-on high` to fail only on unreachable or
+  critical nodes.
+tags:
+  extension: "@lstrandos/vpp"
+inputs:
+  type: object
+  properties:
+    nodes:
+      type: array
+      description: Names of @lstrandos/vpp/node behaviors to check
+      items: { type: string }
+      minItems: 1
+    minErrorRate:
+      type: number
+      description: Passed to health (error counters per second)
+      default: 1
+  required: [nodes]
+jobs:
+  - name: health
+    description: health on every node, in parallel; one unreachable node does not stop the rest
+    steps:
+      - name: health-${{ self.node }}
+        description: Collect health on ${{ self.node }}
+        forEach:
+          item: node
+          in: ${{ inputs.nodes }}
+        task:
+          type: behavior
+          behavior: ${{ self.node }}
+          methodName: health
+          inputs:
+            minErrorRate: ${{ inputs.minErrorRate }}
+        dependsOn: []
+        weight: 0
+        allowFailure: true
+    dependsOn: []
+    weight: 0
+  - name: verdict
+    description: Per-node assertions on the health just collected
+    steps:
+      - name: reachable-${{ self.node }}
+        description: health ran in this run and the node is not critical
+        forEach:
+          item: node
+          in: ${{ inputs.nodes }}
+        task:
+          type: assert
+          expr: >-
+            data.latest(self.node, "health").attributes.collectedAt >= run.startedAt &&
+            data.latest(self.node, "health").attributes.status != "critical"
+          message: >-
+            ${{ self.node }}: no fresh health this run (unreachable? see step
+            health-${{ self.node }}) or status critical
+          severity: high
+        dependsOn: []
+        weight: 0
+        allowFailure: false
+      - name: ok-${{ self.node }}
+        description: the node has no findings at warning level or above
+        forEach:
+          item: node
+          in: ${{ inputs.nodes }}
+        task:
+          type: assert
+          expr: >-
+            data.latest(self.node, "health").attributes.collectedAt >= run.startedAt &&
+            data.latest(self.node, "health").attributes.status == "ok"
+          message: >-
+            ${{ self.node }}: health is not ok; see
+            swamp data query 'modelName == "${{ self.node }}" && name == "health"' --select content
+          severity: medium
+        dependsOn: []
+        weight: 0
+        allowFailure: false
+    dependsOn:
+      - job: health
+        condition:
+          type: always
+    weight: 0
+version: 1
